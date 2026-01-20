@@ -1,0 +1,45 @@
+{
+  "tyt": {
+    "Turkce": [
+      "Paragraf",
+      "Dil Bilgisi",
+      "Sözel Mantık"
+    ],
+    "Matematik": [
+      "Temel Kavramlar",
+      "Problemler",
+      "Oran Orantı"
+    ]
+  },
+  "ayt": {
+    "mf": {
+      "Matematik": [
+        "Fonksiyonlar",
+        "Polinomlar",
+        "Limit"
+      ],
+      "Fizik": [
+        "Kuvvet",
+        "Hareket"
+      ]
+    },
+    "tm": {
+      "Edebiyat": [
+        "Cumhuriyet Dönemi",
+        "Şiir Bilgisi"
+      ],
+      "Tarih": [
+        "Osmanlı Kültür"
+      ]
+    }
+  },
+  "lise_9_10": {
+    "Matematik": [
+      "Sayılar",
+      "Denklemler"
+    ],
+    "Fizik": [
+      "Madde ve Özellikleri"
+    ]
+  }
+}
