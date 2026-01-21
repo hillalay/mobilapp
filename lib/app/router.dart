@@ -4,11 +4,21 @@ import 'package:go_router/go_router.dart';
 
 import '../features/dashboard/dashboard_page.dart';
 import '../features/exams/exams_page.dart';
+import '../features/exams/exam_create_entry_page.dart';
+import '../features/exams/exam_general_type_page.dart';
+import '../features/exams/exam_general_form_page.dart';
+import '../features/exams/exam_branch_lesson_page.dart';
+import '../features/exams/exam_branch_form_page.dart';
+import '../features/exams/exam_models.dart';
+import '../features/exams/exam_analytics_page.dart'; 
 import '../features/profile/onboarding_page.dart';
 import '../features/profile/profile_controller.dart';
 import '../features/profile/profile_page.dart';
 import '../features/timer/timer_page.dart';
 import '../features/topics/topics_page.dart';
+import '../features/exams/exams_analysis_page.dart';
+
+
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   // Profil state’ini dinle: değişince router redirect’i yeniden çalışsın
@@ -19,7 +29,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     // App ilk açılış: eğer profil yoksa onboarding’e gidecek zaten
-    initialLocation: '/dashboard',
+    initialLocation: '/onboarding',
 
     redirect: (context, state) {
       final goingToOnboarding = state.matchedLocation == '/onboarding';
@@ -38,6 +48,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       return null; //değişiklik yok
     },
     routes: [
+
+      GoRoute(path:'/',
+      redirect:(context,state){
+        final profileAsync=ref.read(profileProvider);
+        final hasProfile=profileAsync.value !=null;
+        return hasProfile ? '/dashboard' : '/onboarding';
+      },
+      ),
       // Onboarding (bottom bar YOK)
       GoRoute(
         path: '/onboarding',
@@ -62,6 +80,46 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/exams',
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: ExamsPage()),
+          ),
+          GoRoute(
+            path: '/exams/new',
+            builder: (context, state) => const ExamCreateEntryPage(),
+          ),
+          GoRoute(
+            path: '/exams/general/type',
+            builder: (context, state) => const ExamGeneralTypePage(),
+          ),
+          GoRoute(
+            path: '/exams/branch/lesson',
+            builder: (context, state) => const ExamBranchLessonPage(),
+          ),
+          GoRoute(path:'/exams/branch/form',
+          builder:(context,state){
+            final lesson=state.extra as String;
+            return ExamBranchFormPage(lesson: lesson);
+          },
+          ),
+          GoRoute(
+            path: '/exams/general/form',
+            builder: (context, state) {
+            final type = state.extra;
+            if(type is! ExamType){
+              //fallback
+              return const ExamGeneralTypePage();
+            }
+            return ExamGeneralFormPage(type: type);
+            },
+            ),
+          GoRoute(
+            path: '/exams/analysis',
+            builder:(context,state) => const ExamsAnalysisPage(),
+          ),
+          GoRoute(
+            path: '/exams/analytics',
+            builder: (context, state) {
+              final type=state.extra as ExamType;
+              return ExamAnalyticsPage(type: type);
+            },
           ),
           GoRoute(
             path: '/topics',
