@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'dashboard_providers.dart';
 
 class DashboardPage extends ConsumerWidget {
@@ -14,62 +15,114 @@ class DashboardPage extends ConsumerWidget {
       body: summaryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Hata: $e')),
-        data: (s) => Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatCard(
-                      title: 'Toplam Çalışma',
-                      value: s.totalHoursText,
-                      icon: Icons.timer_outlined,
-                      variant: _CardVariant.primary,
+        data: (s) => SingleChildScrollView( // ✅ Scroll eklendi
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // İstatistik kartları
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        title: 'Toplam Çalışma',
+                        value: s.totalHoursText,
+                        icon: Icons.timer_outlined,
+                        variant: _CardVariant.primary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _StatCard(
-                      title: 'Toplam Soru',
-                      value: '${s.totalQuestions}',
-                      icon: Icons.edit_note_outlined,
-                      variant: _CardVariant.neutral,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        title: 'Toplam Soru',
+                        value: '${s.totalQuestions}',
+                        icon: Icons.edit_note_outlined,
+                        variant: _CardVariant.neutral,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _StatCard(
-                      title: 'Bitti',
-                      value: '${s.doneCount} konu',
-                      icon: Icons.check_circle_outline,
-                      variant: _CardVariant.success,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _StatCard(
-                      title: 'Çalışıyorum',
-                      value: '${s.inProgressCount} konu',
-                      icon: Icons.play_circle_outline,
-                      variant: _CardVariant.warning,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Not: Şimdilik bu özet “konu progress” üzerinden hesaplanıyor.',
-                  style: TextStyle(color: Colors.grey),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _StatCard(
+                        title: 'Bitti',
+                        value: '${s.doneCount} konu',
+                        icon: Icons.check_circle_outline,
+                        variant: _CardVariant.success,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _StatCard(
+                        title: 'Çalışıyorum',
+                        value: '${s.inProgressCount} konu',
+                        icon: Icons.play_circle_outline,
+                        variant: _CardVariant.warning,
+                      ),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 32),
+
+                // ✅ Hızlı Erişim Bölümü
+                const Text(
+                  'Hızlı Erişim',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Kronometre
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.timer, color: Colors.green),
+                    title: const Text('Kronometre'),
+                    subtitle: const Text('Çalışma süresini ölç'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/timer'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Denemeler
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.quiz, color: Colors.blue),
+                    title: const Text('Denemeler'),
+                    subtitle: const Text('TYT/AYT denemeleri'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/exams'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Konular
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.book, color: Colors.orange),
+                    title: const Text('Konular'),
+                    subtitle: const Text('Konu takibi'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/topics'),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Not: Şimdilik bu özet "konu progress" üzerinden hesaplanıyor.',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -82,7 +135,7 @@ class _StatCard extends StatelessWidget {
     required this.title,
     required this.value,
     required this.icon,
-    this.variant=_CardVariant.neutral,
+    this.variant = _CardVariant.neutral,
   });
 
   final String title;
@@ -92,12 +145,12 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme=Theme.of(context).colorScheme;
-    final palette=_paletteFor(scheme,variant);
+    final scheme = Theme.of(context).colorScheme;
+    final palette = _paletteFor(scheme, variant);
 
     return Card(
       color: palette.bg,
-      surfaceTintColor: palette.bg, // Material3 “tint” etkisini sabitler
+      surfaceTintColor: palette.bg,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(
@@ -108,7 +161,9 @@ class _StatCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(fontSize: 12, color: palette.subtle),
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 12, color: palette.subtle),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -130,35 +185,33 @@ class _StatCard extends StatelessWidget {
 }
 
 _CardPalette _paletteFor(ColorScheme scheme, _CardVariant v) {
-    switch (v) {
-      case _CardVariant.neutral:
-        return _CardPalette(
-          bg: scheme.surfaceContainerHighest,
-          fg: scheme.onSurface,
-          subtle: scheme.onSurfaceVariant,
-        );
-      case _CardVariant.primary:
-        return _CardPalette(
-          bg: scheme.primaryContainer,
-          fg: scheme.onPrimaryContainer,
-          subtle: scheme.onPrimaryContainer.withOpacity(0.8),
-        );
-      case _CardVariant.success:
-        // ✅ kesin yeşil
-        return _CardPalette(
-          bg: Colors.green.shade100,
-          fg: Colors.green.shade900,
-          subtle: Colors.green.shade800,
-        );
-      case _CardVariant.warning:
-        return _CardPalette(
-          bg: Colors.blue.shade100,
-          fg: const Color.fromARGB(255, 94, 128, 179),
-          subtle: const Color.fromARGB(255, 88, 130, 177),
-        );
-    }
+  switch (v) {
+    case _CardVariant.neutral:
+      return _CardPalette(
+        bg: scheme.surfaceContainerHighest,
+        fg: scheme.onSurface,
+        subtle: scheme.onSurfaceVariant,
+      );
+    case _CardVariant.primary:
+      return _CardPalette(
+        bg: scheme.primaryContainer,
+        fg: scheme.onPrimaryContainer,
+        subtle: scheme.onPrimaryContainer.withOpacity(0.8),
+      );
+    case _CardVariant.success:
+      return _CardPalette(
+        bg: Colors.green.shade100,
+        fg: Colors.green.shade900,
+        subtle: Colors.green.shade800,
+      );
+    case _CardVariant.warning:
+      return _CardPalette(
+        bg: Colors.blue.shade100,
+        fg: const Color.fromARGB(255, 94, 128, 179),
+        subtle: const Color.fromARGB(255, 88, 130, 177),
+      );
   }
-  
+}
 
 enum _CardVariant { neutral, primary, success, warning }
 

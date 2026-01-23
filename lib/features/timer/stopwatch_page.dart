@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'stopwatch_controller.dart';
 import '../topics/topic_providers.dart';
 
-class TimerPage extends ConsumerWidget {
-  const TimerPage({super.key});
+class StopwatchPage extends ConsumerWidget {
+  const StopwatchPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(stopwatchProvider);
-    final notifier = ref.read(stopwatchProvider.notifier);
+    final controller = ref.read(stopwatchProvider.notifier);
     final topicsAsync = ref.watch(filteredTopicsProvider);
 
     return Scaffold(
@@ -21,7 +21,7 @@ class TimerPage extends ConsumerWidget {
               icon: const Icon(Icons.stop),
               tooltip: 'Durdur ve Kaydet',
               onPressed: () async {
-                await notifier.stop();
+                await controller.stop();
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -38,6 +38,7 @@ class TimerPage extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // Kronometre göstergesi
             Card(
               color: state.isRunning ? Colors.green.shade50 : null,
               child: Padding(
@@ -65,6 +66,7 @@ class TimerPage extends ConsumerWidget {
 
             const SizedBox(height: 24),
 
+            // Ders seçimi
             if (!state.isRunning) ...[
               topicsAsync.when(
                 loading: () => const CircularProgressIndicator(),
@@ -87,8 +89,8 @@ class TimerPage extends ConsumerWidget {
                           ...lessons.map((l) => DropdownMenuItem(value: l, child: Text(l))),
                         ],
                         onChanged: (value) {
-                          notifier.setLesson(value);
-                          notifier.setTopic(null);
+                          controller.setLesson(value);
+                          controller.setTopic(null);
                         },
                       ),
 
@@ -107,7 +109,7 @@ class TimerPage extends ConsumerWidget {
                             ...(map[state.lesson] ?? [])
                                 .map((t) => DropdownMenuItem(value: t, child: Text(t))),
                           ],
-                          onChanged: notifier.setTopic,
+                          onChanged: controller.setTopic,
                         ),
                       ],
                     ],
@@ -117,12 +119,13 @@ class TimerPage extends ConsumerWidget {
               const SizedBox(height: 24),
             ],
 
+            // Butonlar
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (!state.isRunning)
                   FilledButton.icon(
-                    onPressed: notifier.start,
+                    onPressed: controller.start,
                     icon: const Icon(Icons.play_arrow),
                     label: const Text('Başlat'),
                     style: FilledButton.styleFrom(
@@ -131,7 +134,7 @@ class TimerPage extends ConsumerWidget {
                   ),
                 if (state.isRunning)
                   FilledButton.icon(
-                    onPressed: notifier.pause,
+                    onPressed: controller.pause,
                     icon: const Icon(Icons.pause),
                     label: const Text('Duraklat'),
                     style: FilledButton.styleFrom(
@@ -142,7 +145,7 @@ class TimerPage extends ConsumerWidget {
                 if (state.seconds > 0 && !state.isRunning) ...[
                   const SizedBox(width: 12),
                   OutlinedButton.icon(
-                    onPressed: notifier.reset,
+                    onPressed: controller.reset,
                     icon: const Icon(Icons.refresh),
                     label: const Text('Sıfırla'),
                     style: OutlinedButton.styleFrom(

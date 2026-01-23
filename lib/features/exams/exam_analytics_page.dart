@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'exam_models.dart';
 import 'exam_analytics_providers.dart';
+import 'widgets/combo_net_chart.dart'; // ✅ Düzeltildi
 
 class ExamAnalyticsPage extends ConsumerWidget {
   const ExamAnalyticsPage({super.key, required this.type});
@@ -20,9 +21,9 @@ class ExamAnalyticsPage extends ConsumerWidget {
       );
     }
 
-    final latest = list.first.general!;
-    final latestName = list.first.name;
-
+    final latest = list.last; // ✅ first yerine last (sıralama ters olabilir)
+    final latestGeneral = latest.general!;
+    final latestName = latest.name;
 
     // Ortalama netleri hesapla
     final avg = <String, double>{};
@@ -38,14 +39,18 @@ class ExamAnalyticsPage extends ConsumerWidget {
     for (final k in avg.keys) {
       avg[k] = avg[k]! / (counts[k] ?? 1);
     }
-    
+
     final computedMax = [
-      ...latest.netsBySection.values,
+      ...latestGeneral.netsBySection.values,
       ...avg.values,
-      ].fold<double>(0.0, (m, v) => v > m ? v : m);
+    ].fold<double>(0.0, (m, v) => v > m ? v : m);
 
     final maxNet = (computedMax < 1.0) ? 1.0 : computedMax;
 
+    // Grafik için veri hazırla
+    final labels = latestGeneral.netsBySection.keys.toList();
+    final latestValues = latestGeneral.netsBySection.values.toList();
+    final avgValues = labels.map((label) => avg[label] ?? 0.0).toList();
 
     return Scaffold(
       appBar: AppBar(title: Text('Analiz • ${type.name.toUpperCase()}')),
@@ -56,12 +61,25 @@ class ExamAnalyticsPage extends ConsumerWidget {
             'Son deneme: $latestName',
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
-          const Text('Son Deneme Branş Netleri', style: TextStyle(fontWeight: FontWeight.w700)),
+          // Grafik
+          ComboNetChart(
+            labels: labels,
+            barValues: latestValues,
+            lineValues: avgValues,
+            barTitle: 'Son Deneme',
+            lineTitle: 'Ortalama',
+          ),
+
+          const SizedBox(height: 24),
+          const Text(
+            'Son Deneme Branş Netleri',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
           const SizedBox(height: 8),
 
-          ...latest.netsBySection.entries.map((e) {
+          ...latestGeneral.netsBySection.entries.map((e) {
             return _NetBarRow(
               label: e.key,
               value: e.value,
@@ -73,7 +91,10 @@ class ExamAnalyticsPage extends ConsumerWidget {
           const Divider(),
           const SizedBox(height: 12),
 
-          const Text('Ortalama Netler', style: TextStyle(fontWeight: FontWeight.w700)),
+          const Text(
+            'Ortalama Netler',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+          ),
           const SizedBox(height: 8),
 
           ...avg.entries.map((e) {
@@ -89,7 +110,10 @@ class ExamAnalyticsPage extends ConsumerWidget {
           Card(
             child: ListTile(
               title: const Text('Toplam Deneme Sayısı'),
-              trailing: Text(list.length.toString()),
+              trailing: Text(
+                list.length.toString(),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
             ),
           ),
         ],
@@ -122,8 +146,13 @@ class _NetBarRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
-              Text('${value.toStringAsFixed(2)}$suffix'),
+              Expanded(
+                child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              Text(
+                '${value.toStringAsFixed(2)}$suffix',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ],
           ),
           const SizedBox(height: 6),

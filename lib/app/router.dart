@@ -17,6 +17,7 @@ import '../features/profile/profile_page.dart';
 import '../features/timer/timer_page.dart';
 import '../features/topics/topics_page.dart';
 import '../features/exams/exams_analysis_page.dart';
+import '../features/timer/stopwatch_page.dart';
 
 
 
@@ -76,6 +77,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: TimerPage()),
           ),
+          GoRoute(path:'/stopwatch',
+          builder: (context, state) => const StopwatchPage(),
+          ),
           GoRoute(
             path: '/exams',
             pageBuilder: (context, state) =>
@@ -84,6 +88,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/exams/new',
             builder: (context, state) => const ExamCreateEntryPage(),
+          ),
+          GoRoute(
+            path:'/exams/analytics',
+            builder:(context,state){
+              final type=state.extra;
+              if(type is!ExamType) return const ExamsPage(); //fallback
+              return ExamAnalyticsPage(type: type);
+            },
           ),
           GoRoute(
             path: '/exams/general/type',

@@ -26,6 +26,18 @@ class ExamStorage {
     return items;
   }
 
+  //Silme fonks
+  Future<void> delete(String id) async{
+    final box = await _open();
+    await box.delete(id);
+  }
+  //Güncelleme fonks
+  Future<void> update(ExamEntry entry) async{
+    final box = await _open();
+    await box.put(entry.id, entry.toMap());
+  }
+
+
   Future<void> clearAll() async {
     final box = await _open();
     await box.clear();
