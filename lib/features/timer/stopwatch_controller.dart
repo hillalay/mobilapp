@@ -2,9 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'study_session.dart';
 import 'study_session_storage.dart';
-
 import 'study_session_providers.dart';
-
 
 class StopwatchState {
   final int seconds;
@@ -45,7 +43,10 @@ class StopwatchState {
   }
 }
 
-// ✅ Basit state notifier
+final stopwatchProvider = NotifierProvider<StopwatchNotifier, StopwatchState>(
+  StopwatchNotifier.new,
+);
+
 class StopwatchNotifier extends Notifier<StopwatchState> {
   Timer? _timer;
 
@@ -84,9 +85,19 @@ class StopwatchNotifier extends Notifier<StopwatchState> {
     state = state.copyWith(topic: topic);
   }
 
+  // ✅ DÜZELTME: start() fonksiyonu
   Future<void> start() async {
     if (state.isRunning) return;
 
+    // ✅ Eğer activeSession varsa (durakladıktan sonra devam ediyoruz)
+    if (state.activeSession != null) {
+      // Sadece isRunning'i true yap, seconds'ı SIFIRLAMA!
+      state = state.copyWith(isRunning: true);
+      _startTimer();
+      return;
+    }
+
+    // ✅ Yeni session başlatıyoruz (ilk kez başlatma)
     final session = StudySession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       startTime: DateTime.now(),
@@ -99,7 +110,7 @@ class StopwatchNotifier extends Notifier<StopwatchState> {
 
     state = state.copyWith(
       isRunning: true,
-      seconds: 0,
+      seconds: 0, // ✅ Sadece yeni başlatmada sıfırla
       activeSession: session,
     );
 
@@ -158,8 +169,3 @@ class StopwatchNotifier extends Notifier<StopwatchState> {
     state = state.copyWith(seconds: 0, isRunning: false);
   }
 }
-
-// ✅ Provider
-final stopwatchProvider = NotifierProvider<StopwatchNotifier, StopwatchState>(
-  StopwatchNotifier.new,
-);
