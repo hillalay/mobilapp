@@ -6,21 +6,42 @@ import '../topics/topic_providers.dart';
 import 'exam_models.dart';
 import 'exam_providers.dart';
 
-class ExamBranchFormPage extends ConsumerStatefulWidget {
-  const ExamBranchFormPage({super.key, required this.lesson});
-  final String lesson;
+/// Branş denemesi düzenleme sayfası
+class ExamBranchEditPage extends ConsumerStatefulWidget {
+  const ExamBranchEditPage({
+    super.key,
+    required this.exam,
+  });
+
+  final ExamEntry exam;
 
   @override
-  ConsumerState<ExamBranchFormPage> createState() => _ExamBranchFormPageState();
+  ConsumerState<ExamBranchEditPage> createState() => _ExamBranchEditPageState();
 }
 
-class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
-  final nameCtrl = TextEditingController();
-  final correctCtrl = TextEditingController(text: '0');
-  final wrongCtrl = TextEditingController(text: '0');
-  final blankCtrl = TextEditingController(text: '0');
+class _ExamBranchEditPageState extends ConsumerState<ExamBranchEditPage> {
+  late final TextEditingController nameCtrl;
+  late final TextEditingController correctCtrl;
+  late final TextEditingController wrongCtrl;
+  late final TextEditingController blankCtrl;
 
   final selectedTopics = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // ✅ Mevcut değerleri yükle
+    final branch = widget.exam.branch!;
+    
+    nameCtrl = TextEditingController(text: widget.exam.name);
+    correctCtrl = TextEditingController(text: branch.correct.toString());
+    wrongCtrl = TextEditingController(text: branch.wrong.toString());
+    blankCtrl = TextEditingController(text: branch.blank.toString());
+    
+    // Seçili konuları yükle
+    selectedTopics.addAll(branch.topics);
+  }
 
   @override
   void dispose() {
@@ -33,14 +54,41 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    final branch = widget.exam.branch!;
     final topicsAsync = ref.watch(filteredTopicsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text('Branş Denemesi • ${widget.lesson}')),
+      appBar: AppBar(
+        title: Text('Deneme Düzenle • ${branch.lesson}'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
+            // ✅ Bilgi kartı
+            Card(
+              color: Colors.blue.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue.shade700),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Branş denemesi düzenleniyor',
+                        style: TextStyle(
+                          color: Colors.blue.shade900,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             TextField(
               controller: nameCtrl,
               decoration: const InputDecoration(
@@ -57,7 +105,7 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Text('Hata: $e'),
               data: (map) {
-                final topics = map[widget.lesson] ?? const <String>[];
+                final topics = map[branch.lesson] ?? const <String>[];
                 if (topics.isEmpty) {
                   return const Text('Bu ders için konu bulunamadı.');
                 }
@@ -91,7 +139,7 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
                   child: TextField(
                     controller: correctCtrl,
                     keyboardType: TextInputType.number,
-                    onChanged: (_) => setState(() {}), // ✅ net anlık güncellensin
+                    onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Doğru',
                       border: OutlineInputBorder(),
@@ -103,7 +151,7 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
                   child: TextField(
                     controller: wrongCtrl,
                     keyboardType: TextInputType.number,
-                    onChanged: (_) => setState(() {}), // ✅
+                    onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Yanlış',
                       border: OutlineInputBorder(),
@@ -115,7 +163,7 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
                   child: TextField(
                     controller: blankCtrl,
                     keyboardType: TextInputType.number,
-                    onChanged: (_) => setState(() {}), // ✅
+                    onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Boş',
                       border: OutlineInputBorder(),
@@ -126,13 +174,16 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
             ),
 
             const SizedBox(height: 12),
-            _builderNetPreview(),
+            _buildNetPreview(),
 
             const SizedBox(height: 16),
 
+            // ✅ Güncelleme butonu
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
+              child: FilledButton.icon(
+                icon: const Icon(Icons.check),
+                label: const Text('Değişiklikleri Kaydet'),
                 onPressed: () async {
                   final name = nameCtrl.text.trim();
                   if (name.isEmpty) {
@@ -142,17 +193,25 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
                     return;
                   }
 
+                  if (selectedTopics.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('En az 1 konu seçmelisin.')),
+                    );
+                    return;
+                  }
+
                   final correct = int.tryParse(correctCtrl.text.trim()) ?? 0;
                   final wrong = int.tryParse(wrongCtrl.text.trim()) ?? 0;
                   final blank = int.tryParse(blankCtrl.text.trim()) ?? 0;
 
-                  final entry = ExamEntry(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
-                    createdAt: DateTime.now(),
+                  // ✅ Mevcut denemeyi güncelle
+                  final updatedEntry = ExamEntry(
+                    id: widget.exam.id, // ✅ Aynı ID
+                    createdAt: widget.exam.createdAt, // ✅ Aynı tarih
                     name: name,
                     kind: ExamKind.branch,
                     branch: BranchExamResult(
-                      lesson: widget.lesson,
+                      lesson: branch.lesson, // Ders değişmez
                       topics: selectedTopics.toList(),
                       correct: correct,
                       wrong: wrong,
@@ -160,21 +219,29 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
                     ),
                   );
 
-                  await ref.read(examStorageProvider).add(entry);
+                  // ✅ Update fonksiyonunu kullan
+                  await ref.read(examStorageProvider).update(updatedEntry);
                   ref.invalidate(examsProvider);
 
-                  if (context.mounted) context.pop(); // geri
+                  if (context.mounted) {
+                    context.pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Deneme güncellendi! ✅'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
                 },
-                child: const Text('Kaydet'),
               ),
-            )
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _builderNetPreview() {
+  Widget _buildNetPreview() {
     final c = int.tryParse(correctCtrl.text.trim()) ?? 0;
     final w = int.tryParse(wrongCtrl.text.trim()) ?? 0;
     final net = c - (w / 4.0);

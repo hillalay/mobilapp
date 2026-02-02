@@ -10,53 +10,49 @@ import '../features/exams/exam_general_form_page.dart';
 import '../features/exams/exam_branch_lesson_page.dart';
 import '../features/exams/exam_branch_form_page.dart';
 import '../features/exams/exam_models.dart';
-import '../features/exams/exam_analytics_page.dart'; 
+import '../features/exams/exam_analytics_page.dart';
+import '../features/exams/exams_analysis_page.dart';
+import '../features/exams/exam_general_edit_page.dart';
+import '../features/exams/exam_branch_edit_page.dart';
+
 import '../features/profile/onboarding_page.dart';
 import '../features/profile/profile_controller.dart';
 import '../features/profile/profile_page.dart';
+
 import '../features/timer/timer_page.dart';
-import '../features/topics/topics_page.dart';
-import '../features/exams/exams_analysis_page.dart';
 import '../features/timer/stopwatch_page.dart';
 
-
+import '../features/topics/topics_page.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
-  // Profil state’ini dinle: değişince router redirect’i yeniden çalışsın
-  final profileAsync = ref.watch(profileProvider);
-  final hasProfile = profileAsync.value != null;
-  final isLoading = profileAsync.isLoading;
-
+  // Profil state’ini dinle: değişince redirect tekrar çalışsın
+  ref.watch(profileProvider);
 
   return GoRouter(
-    // App ilk açılış: eğer profil yoksa onboarding’e gidecek zaten
     initialLocation: '/onboarding',
-
     redirect: (context, state) {
       final goingToOnboarding = state.matchedLocation == '/onboarding';
       final profileAsync = ref.read(profileProvider);
-      if(profileAsync.isLoading){
-        return null; //bekle
-      }
+
+      if (profileAsync.isLoading) return null;
+
       final hasProfile = profileAsync.value != null;
 
-      if(!hasProfile && !goingToOnboarding) {
-        return '/onboarding';
-      }
-      if(hasProfile && goingToOnboarding) {
-        return '/dashboard';
-      }
-      return null; //değişiklik yok
+      if (!hasProfile && !goingToOnboarding) return '/onboarding';
+      if (hasProfile && goingToOnboarding) return '/dashboard';
+
+      return null;
     },
     routes: [
-
-      GoRoute(path:'/',
-      redirect:(context,state){
-        final profileAsync=ref.read(profileProvider);
-        final hasProfile=profileAsync.value !=null;
-        return hasProfile ? '/dashboard' : '/onboarding';
-      },
+      GoRoute(
+        path: '/',
+        redirect: (context, state) {
+          final profileAsync = ref.read(profileProvider);
+          final hasProfile = profileAsync.value != null;
+          return hasProfile ? '/dashboard' : '/onboarding';
+        },
       ),
+
       // Onboarding (bottom bar YOK)
       GoRoute(
         path: '/onboarding',
@@ -77,9 +73,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: TimerPage()),
           ),
-          GoRoute(path:'/stopwatch',
-          builder: (context, state) => const StopwatchPage(),
+          GoRoute(
+            path: '/stopwatch',
+            builder: (context, state) => const StopwatchPage(),
           ),
+
           GoRoute(
             path: '/exams',
             pageBuilder: (context, state) =>
@@ -89,50 +87,67 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/exams/new',
             builder: (context, state) => const ExamCreateEntryPage(),
           ),
+
+          // TEK analytics route 
           GoRoute(
-            path:'/exams/analytics',
-            builder:(context,state){
-              final type=state.extra;
-              if(type is!ExamType) return const ExamsPage(); //fallback
+            path: '/exams/analytics',
+            builder: (context, state) {
+              final type = state.extra;
+              if (type is! ExamType) return const ExamsPage(); // fallback
               return ExamAnalyticsPage(type: type);
             },
           ),
+                    // GENERAL EDIT 
+          GoRoute(
+            path: '/exams/general/edit',
+            builder: (context, state) {
+              final exam = state.extra;
+              if (exam is! ExamEntry) return const ExamsPage(); // fallback
+              return ExamGeneralEditPage(exam: exam);
+            },
+          ),
+          
           GoRoute(
             path: '/exams/general/type',
             builder: (context, state) => const ExamGeneralTypePage(),
           ),
           GoRoute(
+            path: '/exams/general/form',
+            builder: (context, state) {
+              final type = state.extra;
+              if (type is! ExamType) return const ExamGeneralTypePage();
+              return ExamGeneralFormPage(type: type);
+            },
+          ),
+
+          GoRoute(
             path: '/exams/branch/lesson',
             builder: (context, state) => const ExamBranchLessonPage(),
           ),
-          GoRoute(path:'/exams/branch/form',
-          builder:(context,state){
-            final lesson=state.extra as String;
-            return ExamBranchFormPage(lesson: lesson);
-          },
-          ),
           GoRoute(
-            path: '/exams/general/form',
+            path: '/exams/branch/form',
             builder: (context, state) {
-            final type = state.extra;
-            if(type is! ExamType){
-              //fallback
-              return const ExamGeneralTypePage();
-            }
-            return ExamGeneralFormPage(type: type);
+              final lesson = state.extra;
+              if (lesson is! String) return const ExamsPage(); // fallback
+              return ExamBranchFormPage(lesson: lesson);
             },
-            ),
+          ),
+
           GoRoute(
             path: '/exams/analysis',
-            builder:(context,state) => const ExamsAnalysisPage(),
+            builder: (context, state) => const ExamsAnalysisPage(),
           ),
+
+          // BRANCH EDIT
           GoRoute(
-            path: '/exams/analytics',
+            path: '/exams/branch/edit',
             builder: (context, state) {
-              final type=state.extra as ExamType;
-              return ExamAnalyticsPage(type: type);
+              final exam = state.extra;
+              if (exam is! ExamEntry) return const ExamsPage(); // fallback
+              return ExamBranchEditPage(exam: exam);
             },
           ),
+
           GoRoute(
             path: '/topics',
             pageBuilder: (context, state) =>

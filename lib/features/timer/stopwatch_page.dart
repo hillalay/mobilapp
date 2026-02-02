@@ -79,7 +79,7 @@ class StopwatchPage extends ConsumerWidget {
                       const Text('Ders Seç:', style: TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        value: state.lesson,
+                        initialValue: state.lesson,
                         decoration: const InputDecoration(
                           border: OutlineInputBorder(),
                           hintText: 'Ders seç (opsiyonel)',
@@ -99,7 +99,7 @@ class StopwatchPage extends ConsumerWidget {
                         const Text('Konu Seç:', style: TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 8),
                         DropdownButtonFormField<String>(
-                          value: state.topic,
+                          initialValue: state.topic,
                           decoration: const InputDecoration(
                             border: OutlineInputBorder(),
                             hintText: 'Konu seç (opsiyonel)',

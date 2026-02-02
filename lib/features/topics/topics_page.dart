@@ -223,7 +223,7 @@ class _ProgressSheetState extends ConsumerState<_ProgressSheet> {
           const Text('Durum'),
           const SizedBox(height: 6),
           DropdownButtonFormField<TopicStatus>(
-            value: status,
+            initialValue: status,
             items: const [
               DropdownMenuItem(
                 value: TopicStatus.notStarted,

@@ -1,27 +1,192 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:screenshot/screenshot.dart';
 import 'exam_models.dart';
 import 'exam_analytics_providers.dart';
-import 'widgets/combo_net_chart.dart'; // ✅ Düzeltildi
+import 'single_exam_progress_chart.dart';
+import 'share_helper.dart';
 
-class ExamAnalyticsPage extends ConsumerWidget {
+class ExamAnalyticsPage extends ConsumerStatefulWidget {
   const ExamAnalyticsPage({super.key, required this.type});
   final ExamType type;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final list = type == ExamType.tyt
+  ConsumerState<ExamAnalyticsPage> createState() => _ExamAnalyticsPageState();
+}
+
+class _ExamAnalyticsPageState extends ConsumerState<ExamAnalyticsPage> {
+  // ✅ Screenshot controller burada tanımlanıyor
+  final ScreenshotController _screenshotController = ScreenshotController();
+  bool _isSharing = false;
+
+  Future<void> _handleShare(
+    String examType,
+    int examCount,
+    double latestNet,
+  ) async {
+    setState(() => _isSharing = true);
+
+    try {
+      await ShareHelper.shareChart(
+        controller: _screenshotController,
+        examType: examType,
+        examCount: examCount,
+        latestNet: latestNet,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Grafik paylaşıldı! 🎉'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Paylaşma hatası: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSharing = false);
+      }
+    }
+  }
+
+  void _showShareOptions(
+    String examType,
+    int examCount,
+    double latestNet,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Grafiği Paylaş',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+
+            // Sosyal medyada paylaş
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.blue.shade100,
+                child: Icon(Icons.share, color: Colors.blue.shade700),
+              ),
+              title: const Text('Sosyal Medyada Paylaş'),
+              subtitle: const Text('Instagram, WhatsApp, Twitter...'),
+              trailing: _isSharing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: _isSharing
+                  ? null
+                  : () {
+                      Navigator.pop(context);
+                      _handleShare(examType, examCount, latestNet);
+                    },
+            ),
+
+            const SizedBox(height: 8),
+
+            // Cihaza kaydet
+            ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.green.shade100,
+                child: Icon(Icons.save_alt, color: Colors.green.shade700),
+              ),
+              title: const Text('Cihaza Kaydet'),
+              subtitle: const Text('Grafik PNG olarak kaydedilecek'),
+              trailing: _isSharing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: _isSharing
+                  ? null
+                  : () async {
+                      Navigator.pop(context);
+                      setState(() => _isSharing = true);
+                      try {
+                        final path = await ShareHelper.saveChart(
+                          controller: _screenshotController,
+                          examType: examType,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Grafik kaydedildi!\n$path'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Hata: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      } finally {
+                        if (mounted) {
+                          setState(() => _isSharing = false);
+                        }
+                      }
+                    },
+            ),
+
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final list = widget.type == ExamType.tyt
         ? ref.watch(tytGeneralExamsProvider)
         : ref.watch(aytGeneralExamsProvider);
 
     if (list.isEmpty) {
       return Scaffold(
-        appBar: AppBar(title: Text('Analiz • ${type.name.toUpperCase()}')),
+        appBar: AppBar(
+          title: Text('Analiz • ${widget.type.name.toUpperCase()}'),
+        ),
         body: const Center(child: Text('Henüz bu türde genel deneme yok.')),
       );
     }
 
-    final latest = list.last; // ✅ first yerine last (sıralama ters olabilir)
+    final latest = list.last;
     final latestGeneral = latest.general!;
     final latestName = latest.name;
 
@@ -47,30 +212,71 @@ class ExamAnalyticsPage extends ConsumerWidget {
 
     final maxNet = (computedMax < 1.0) ? 1.0 : computedMax;
 
-    // Grafik için veri hazırla
     final labels = latestGeneral.netsBySection.keys.toList();
     final latestValues = latestGeneral.netsBySection.values.toList();
     final avgValues = labels.map((label) => avg[label] ?? 0.0).toList();
 
+    // Çizgi grafik için toplam netleri hesapla
+    final totalNets = list.map((e) {
+      final nets = e.general!.netsBySection.values;
+      return nets.fold(0.0, (sum, net) => sum + net);
+    }).toList();
+
+    final chartColor = widget.type == ExamType.tyt ? Colors.blue : Colors.orange;
+    final latestTotalNet = totalNets.last;
+
     return Scaffold(
-      appBar: AppBar(title: Text('Analiz • ${type.name.toUpperCase()}')),
+      appBar: AppBar(
+        title: Text('Analiz • ${widget.type.name.toUpperCase()}'),
+        actions: [
+          // ✅ TEMİZ PAYLAŞ BUTONU - APPBAR'DA
+          IconButton(
+            icon: _isSharing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.share_rounded),
+            tooltip: 'Grafiği Paylaş',
+            onPressed: _isSharing
+                ? null
+                : () => _showShareOptions(
+                      widget.type.name.toUpperCase(),
+                      list.length,
+                      latestTotalNet,
+                    ),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // ✅ TEMİZ GRAFİK - PAYLAŞ BUTONU YOK
+          Screenshot(
+            controller: _screenshotController,
+            child: Container(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: SingleExamProgressChart(
+                examType: widget.type.name.toUpperCase(),
+                netData: totalNets,
+                color: chartColor,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 24),
+
           Text(
             'Son deneme: $latestName',
             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
           ),
           const SizedBox(height: 16),
-
-          // Grafik
-          ComboNetChart(
-            labels: labels,
-            barValues: latestValues,
-            lineValues: avgValues,
-            barTitle: 'Son Deneme',
-            lineTitle: 'Ortalama',
-          ),
 
           const SizedBox(height: 24),
           const Text(
@@ -147,7 +353,10 @@ class _NetBarRow extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
               Text(
                 '${value.toStringAsFixed(2)}$suffix',

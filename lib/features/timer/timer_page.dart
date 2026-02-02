@@ -75,7 +75,7 @@ class TimerPage extends ConsumerWidget {
                             ],
                           ),
                           child: DropdownButtonFormField<String>(
-                            value: state.lesson,
+                            initialValue: state.lesson,
                             decoration: InputDecoration(
                               prefixIcon: const Icon(Icons.school_rounded),
                               hintText: 'Ders seç (opsiyonel)',
@@ -112,7 +112,7 @@ class TimerPage extends ConsumerWidget {
                               ],
                             ),
                             child: DropdownButtonFormField<String>(
-                              value: state.topic,
+                              initialValue: state.topic,
                               decoration: InputDecoration(
                                 prefixIcon: const Icon(Icons.topic_rounded),
                                 hintText: 'Konu seç (opsiyonel)',

@@ -8,7 +8,6 @@ import 'exam_models.dart';
 class ExamsPage extends ConsumerWidget {
   const ExamsPage({super.key});
 
-  // ✅ Silme işlemi için dialog
   Future<bool> _showDeleteDialog(BuildContext context, String name) async {
     return await showDialog<bool>(
           context: context,
@@ -81,22 +80,16 @@ class ExamsPage extends ConsumerWidget {
               return ListTile(
                 title: Text(x.name),
                 subtitle: Text(subtitle),
-                // ✅ Sağ tarafa menü eklendi
                 trailing: PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert),
                   onSelected: (value) async {
                     if (value == 'delete') {
-                      // Silme onayı al
                       final confirmed = await _showDeleteDialog(context, x.name);
                       if (!confirmed) return;
 
-                      // Sil
                       await ref.read(examStorageProvider).delete(x.id);
-                      
-                      // Listeyi yenile
                       ref.invalidate(examsProvider);
                       
-                      // Başarı mesajı
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -106,21 +99,13 @@ class ExamsPage extends ConsumerWidget {
                         );
                       }
                     } else if (value == 'edit') {
-                      // Düzenleme sayfasına git
+                      // ✅ DÜZENLEME AKTİF EDİLDİ!
                       if (x.kind == ExamKind.branch) {
-                        // Branş denemesi düzenleme (henüz yapmadık)
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Branş denemesi düzenleme yakında eklenecek'),
-                          ),
-                        );
+                        // Branş denemesi düzenleme
+                        context.push('/exams/branch/edit', extra: x);
                       } else {
-                        // Genel deneme düzenleme (henüz yapmadık)
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Genel deneme düzenleme yakında eklenecek'),
-                          ),
-                        );
+                        // Genel deneme düzenleme
+                        context.push('/exams/general/edit', extra: x);
                       }
                     }
                   },
@@ -147,9 +132,7 @@ class ExamsPage extends ConsumerWidget {
                     ),
                   ],
                 ),
-                // ✅ Tıklayınca detay göster (opsiyonel)
                 onTap: () {
-                  // Detay sayfası ekleyebilirsiniz
                   showDialog(
                     context: context,
                     builder: (ctx) => AlertDialog(

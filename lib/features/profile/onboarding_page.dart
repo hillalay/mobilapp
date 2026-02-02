@@ -83,7 +83,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 const SizedBox(height: 12),
                 _sectionTitle('Alan'),
                 DropdownButtonFormField<Track>(
-                  value: track,
+                  initialValue: track,
                   items: const [
                     DropdownMenuItem(value: Track.tm, child: Text('TM')),
                     DropdownMenuItem(value: Track.mf, child: Text('MF')),
