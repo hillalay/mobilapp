@@ -26,13 +26,12 @@ import '../features/topics/topics_page.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   // Profil state’ini dinle: değişince redirect tekrar çalışsın
-  ref.watch(profileProvider);
+  final profileAsync = ref.watch(profileProvider);
 
   return GoRouter(
     initialLocation: '/onboarding',
     redirect: (context, state) {
       final goingToOnboarding = state.matchedLocation == '/onboarding';
-      final profileAsync = ref.read(profileProvider);
 
       if (profileAsync.isLoading) return null;
 
@@ -47,7 +46,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         redirect: (context, state) {
-          final profileAsync = ref.read(profileProvider);
+          if(profileAsync.isLoading) return null;
           final hasProfile = profileAsync.value != null;
           return hasProfile ? '/dashboard' : '/onboarding';
         },

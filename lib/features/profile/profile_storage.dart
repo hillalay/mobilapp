@@ -3,16 +3,16 @@ import 'profile_controller.dart';
 
 class ProfileStorage {
   static const _boxName = 'profile_box';
-  static const _key = 'user_profile';
+  static const _key = 'profile';
 
-  Future<Box> _open() async => Hive.openBox(_boxName);
+  Future<Box> _open() async {
+    return Hive.openBox(_boxName);
+  }
 
   Future<void> save(UserProfile profile) async {
     final box = await _open();
     await box.put(_key, {
-      'role': profile.role.name,
-      'gradeGroup': profile.gradeGroup?.name,
-      'track': profile.track?.name,
+      'track': profile.track.name, // mf/tm/sozel/dil
     });
   }
 
@@ -23,15 +23,13 @@ class ProfileStorage {
 
     final map = Map<String, dynamic>.from(data);
 
-    final role = UserRole.values.byName(map['role'] as String);
+    final trackStr = map['track'] as String?;
+    if (trackStr == null) return null;
 
-    final ggName = map['gradeGroup'] as String?;
-    final trName = map['track'] as String?;
+    // String -> enum
+    final track = Track.values.byName(trackStr);
 
-    final gradeGroup = ggName == null ? null : GradeGroup.values.byName(ggName);
-    final track = trName == null ? null : Track.values.byName(trName);
-
-    return UserProfile(role: role, gradeGroup: gradeGroup, track: track);
+    return UserProfile(track: track);
   }
 
   Future<void> clear() async {

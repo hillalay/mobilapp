@@ -33,7 +33,7 @@ class _ExamBranchFormPageState extends ConsumerState<ExamBranchFormPage> {
 
   @override
   Widget build(BuildContext context) {
-    final topicsAsync = ref.watch(filteredTopicsProvider);
+    final topicsAsync = ref.watch(mergedTopicsProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text('Branş Denemesi • ${widget.lesson}')),

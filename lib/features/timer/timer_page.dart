@@ -1,8 +1,10 @@
+import 'dart:math' as math;
+import 'dart:ui' show FontFeature;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:math' as math;
+
 import 'stopwatch_controller.dart';
-import '../topics/topic_providers.dart';
 
 class TimerPage extends ConsumerWidget {
   const TimerPage({super.key});
@@ -11,7 +13,6 @@ class TimerPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(stopwatchProvider);
     final notifier = ref.read(stopwatchProvider.notifier);
-    final topicsAsync = ref.watch(filteredTopicsProvider);
 
     return Scaffold(
       backgroundColor: state.isRunning ? Colors.green.shade50 : Colors.grey.shade50,
@@ -19,7 +20,6 @@ class TimerPage extends ConsumerWidget {
         title: const Text('Kronometre'),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // ✅ AppBar'dan actions kaldırıldı
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -30,113 +30,12 @@ class TimerPage extends ConsumerWidget {
               CircularTimer(
                 seconds: state.seconds,
                 isRunning: state.isRunning,
-                lesson: state.lesson,
-                topic: state.topic,
               ),
 
               const SizedBox(height: 40),
 
-              // ✅ KONTROL BUTONLARI - 3 DURUMA GÖRE DEĞİŞİR
+              // Kontrol butonları
               _buildControlButtons(context, state, notifier),
-
-              const SizedBox(height: 32),
-
-              // Ders/Konu Seçimi
-              if (!state.isRunning) ...[
-                topicsAsync.when(
-                  loading: () => const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Text('Hata: $e'),
-                  data: (map) {
-                    final lessons = map.keys.toList();
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Padding(
-                          padding: EdgeInsets.only(left: 4, bottom: 12),
-                          child: Text(
-                            'Ders ve Konu Seç',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.05),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: DropdownButtonFormField<String>(
-                            initialValue: state.lesson,
-                            decoration: InputDecoration(
-                              prefixIcon: const Icon(Icons.school_rounded),
-                              hintText: 'Ders seç (opsiyonel)',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide.none,
-                              ),
-                              filled: true,
-                              fillColor: Colors.transparent,
-                            ),
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('Seçim yok')),
-                              ...lessons.map((l) => DropdownMenuItem(value: l, child: Text(l))),
-                            ],
-                            onChanged: (value) {
-                              notifier.setLesson(value);
-                              notifier.setTopic(null);
-                            },
-                          ),
-                        ),
-
-                        if (state.lesson != null) ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: DropdownButtonFormField<String>(
-                              initialValue: state.topic,
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(Icons.topic_rounded),
-                                hintText: 'Konu seç (opsiyonel)',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
-                                filled: true,
-                                fillColor: Colors.transparent,
-                              ),
-                              items: [
-                                const DropdownMenuItem(value: null, child: Text('Seçim yok')),
-                                ...(map[state.lesson] ?? [])
-                                    .map((t) => DropdownMenuItem(value: t, child: Text(t))),
-                              ],
-                              onChanged: notifier.setTopic,
-                            ),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
-                ),
-              ],
             ],
           ),
         ),
@@ -144,17 +43,11 @@ class TimerPage extends ConsumerWidget {
     );
   }
 
-  // ✅ BUTON DÜZENİNİ BELİRLEYEN FONKSİYON
-  // Bu fonksiyon 3 farklı duruma göre buton düzeni oluşturur:
-  // 1. Başlangıç: Sadece "Başlat" butonu
-  // 2. Çalışıyor: "Duraklat" + "Kaydet" butonları
-  // 3. Duraklatıldı: "Başlat" + "Sıfırla" + "Kaydet" butonları
   Widget _buildControlButtons(
     BuildContext context,
     StopwatchState state,
     StopwatchNotifier notifier,
   ) {
-    // DURUM 1: Hiç başlatılmamış (seconds = 0 ve çalışmıyor)
     if (state.seconds == 0 && !state.isRunning) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -170,12 +63,10 @@ class TimerPage extends ConsumerWidget {
       );
     }
 
-    // DURUM 2: Çalışıyor (isRunning = true)
     if (state.isRunning) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Duraklat butonu
           _CircularButton(
             onPressed: notifier.pause,
             icon: Icons.pause_rounded,
@@ -183,10 +74,7 @@ class TimerPage extends ConsumerWidget {
             size: 80,
             label: 'Duraklat',
           ),
-          
           const SizedBox(width: 20),
-          
-          // Kaydet butonu
           _CircularButton(
             onPressed: () async {
               await notifier.stop();
@@ -212,11 +100,9 @@ class TimerPage extends ConsumerWidget {
       );
     }
 
-    // DURUM 3: Duraklatılmış (seconds > 0 ama çalışmıyor)
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Devam et butonu
         _CircularButton(
           onPressed: notifier.start,
           icon: Icons.play_arrow_rounded,
@@ -224,10 +110,7 @@ class TimerPage extends ConsumerWidget {
           size: 80,
           label: 'Devam',
         ),
-        
         const SizedBox(width: 16),
-        
-        // Sıfırla butonu
         _CircularButton(
           onPressed: notifier.reset,
           icon: Icons.refresh_rounded,
@@ -235,10 +118,7 @@ class TimerPage extends ConsumerWidget {
           size: 64,
           label: 'Sıfırla',
         ),
-        
         const SizedBox(width: 16),
-        
-        // Kaydet butonu
         _CircularButton(
           onPressed: () async {
             await notifier.stop();
@@ -265,20 +145,15 @@ class TimerPage extends ConsumerWidget {
   }
 }
 
-// CircularTimer aynı kalıyor...
 class CircularTimer extends StatelessWidget {
   const CircularTimer({
     super.key,
     required this.seconds,
     required this.isRunning,
-    this.lesson,
-    this.topic,
   });
 
   final int seconds;
   final bool isRunning;
-  final String? lesson;
-  final String? topic;
 
   String get formattedTime {
     final hours = seconds ~/ 3600;
@@ -338,35 +213,6 @@ class CircularTimer extends StatelessWidget {
                   ),
                 ],
               ),
-              if (lesson != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isRunning ? Colors.green.shade50 : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.book,
-                        size: 16,
-                        color: isRunning ? Colors.green.shade700 : Colors.grey.shade700,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$lesson${topic != null ? ' • $topic' : ''}',
-                        style: TextStyle(
-                          color: isRunning ? Colors.green.shade700 : Colors.grey.shade700,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
         ],
@@ -415,29 +261,26 @@ class _CircularTimerPainter extends CustomPainter {
   }
 }
 
-// ✅ GÜNCELLENMIŞ YUVARLAK BUTON - LABEL EKLENDİ
 class _CircularButton extends StatelessWidget {
   const _CircularButton({
     required this.onPressed,
     required this.icon,
     required this.color,
     this.size = 72,
-    this.label, // ✅ Yeni parametre
+    this.label,
   });
 
   final VoidCallback onPressed;
   final IconData icon;
   final Color color;
   final double size;
-  final String? label; // ✅ Opsiyonel yazı
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
-    // ✅ Column kullanarak buton + yazıyı dikey olarak yerleştiriyoruz
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Yuvarlak buton
         Container(
           width: size,
           height: size,
@@ -463,8 +306,6 @@ class _CircularButton extends StatelessWidget {
             child: Icon(icon, size: size * 0.45),
           ),
         ),
-        
-        // ✅ Label (yazı) - varsa göster
         if (label != null) ...[
           const SizedBox(height: 8),
           Text(

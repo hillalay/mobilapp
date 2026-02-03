@@ -27,6 +27,8 @@ class _ExamBranchEditPageState extends ConsumerState<ExamBranchEditPage> {
 
   final selectedTopics = <String>{};
 
+  //TYT/AYT seçimi
+
   @override
   void initState() {
     super.initState();
@@ -55,7 +57,7 @@ class _ExamBranchEditPageState extends ConsumerState<ExamBranchEditPage> {
   @override
   Widget build(BuildContext context) {
     final branch = widget.exam.branch!;
-    final topicsAsync = ref.watch(filteredTopicsProvider);
+    final topicsAsync = ref.watch(mergedTopicsProvider);
 
     return Scaffold(
       appBar: AppBar(

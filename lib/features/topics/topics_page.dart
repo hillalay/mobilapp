@@ -1,57 +1,94 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../exams/exam_models.dart'; // ExamType (tyt/ayt)
 import 'topic_providers.dart';
 import 'topic_progress.dart';
 import 'topic_progress_providers.dart';
 
-class TopicsPage extends ConsumerWidget {
+class TopicsPage extends ConsumerStatefulWidget {
   const TopicsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final topicsAsync = ref.watch(filteredTopicsProvider);
+  ConsumerState<TopicsPage> createState() => _TopicsPageState();
+}
+
+class _TopicsPageState extends ConsumerState<TopicsPage> {
+  ExamType selected = ExamType.tyt;
+
+  @override
+  Widget build(BuildContext context) {
+    final topicsAsync = selected == ExamType.tyt
+        ? ref.watch(tytTopicsProvider)
+        : ref.watch(aytTopicsProvider);
+
     final progressAsync = ref.watch(topicProgressMapProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Konu Takibi')),
-      body: topicsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Hata: $e')),
-        data: (topics) {
-          return progressAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Hata: $e')),
-            data: (progressMap) {
-              return ListView(
-                children: topics.entries.map((entry) {
-                  final subject = entry.key;
-                  final topicList = entry.value;
+      body: Column(
+        children: [
+          const SizedBox(height: 12),
 
-                  return ExpansionTile(
-                    title: Text(subject),
-                    children: topicList.map((topic) {
-                      final key = '$subject::$topic';
-                      final p = progressMap[key] ??
-                          TopicProgress(subject: subject, topic: topic);
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SegmentedButton<ExamType>(
+              segments: const [
+                ButtonSegment(value: ExamType.tyt, label: Text('TYT')),
+                ButtonSegment(value: ExamType.ayt, label: Text('AYT')),
+              ],
+              selected: {selected},
+              onSelectionChanged: (s) => setState(() => selected = s.first),
+            ),
+          ),
 
-                      return ListTile(
-                        title: Text(topic),
-                        subtitle: Text(_subtitle(p)),
-                        trailing: _StatusChip(status: p.status),
-                        onTap: () => _openProgressSheet(
-                          context: context,
-                          ref: ref,
-                          progress: p,
-                        ),
-                      );
-                    }).toList(),
-                  );
-                }).toList(),
-              );
-            },
-          );
-        },
+          const SizedBox(height: 12),
+
+          Expanded(
+            child: topicsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Hata: $e')),
+              data: (topics) {
+                return progressAsync.when(
+                  loading: () => const Center(child: CircularProgressIndicator()),
+                  error: (e, _) => Center(child: Text('Hata: $e')),
+                  data: (progressMap) {
+                    if (topics.isEmpty) {
+                      return const Center(child: Text('Konu bulunamadı.'));
+                    }
+
+                    final subjects = topics.keys.toList()..sort();
+
+                    return ListView(
+                      children: subjects.map((subject) {
+                        final topicList = topics[subject] ?? const <String>[];
+
+                        return ExpansionTile(
+                          title: Text(subject),
+                          children: topicList.map((topic) {
+                            final key = '$subject::$topic';
+                            final p = progressMap[key] ??
+                                TopicProgress(subject: subject, topic: topic);
+
+                            return ListTile(
+                              title: Text(topic),
+                              subtitle: Text(_subtitle(p)),
+                              trailing: _StatusChip(status: p.status),
+                              onTap: () => _openProgressSheet(
+                                context: context,
+                                progress: p,
+                              ),
+                            );
+                          }).toList(),
+                        );
+                      }).toList(),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -78,7 +115,6 @@ class TopicsPage extends ConsumerWidget {
 
   Future<void> _openProgressSheet({
     required BuildContext context,
-    required WidgetRef ref,
     required TopicProgress progress,
   }) async {
     await showModalBottomSheet(
@@ -106,7 +142,7 @@ class _StatusChip extends StatelessWidget {
       TopicStatus.repeat => 'Tekrar',
     };
 
-    final colors=_chipColors(context, status);
+    final colors = _chipColors(context, status);
 
     return Chip(
       label: Text(
@@ -114,41 +150,38 @@ class _StatusChip extends StatelessWidget {
         style: TextStyle(
           color: colors.fg,
           fontWeight: FontWeight.w600,
-          ),
         ),
+      ),
       backgroundColor: colors.bg,
-      side:BorderSide(color:colors.border),
+      side: BorderSide(color: colors.border),
       visualDensity: VisualDensity.compact,
-      padding:const EdgeInsets.symmetric(horizontal:6),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
     );
   }
+
   _ChipPalette _chipColors(BuildContext context, TopicStatus s) {
     final scheme = Theme.of(context).colorScheme;
 
     switch (s) {
       case TopicStatus.notStarted:
-        // gri / nötr
         return _ChipPalette(
           bg: scheme.surfaceContainerHighest,
           fg: scheme.onSurface,
           border: scheme.outlineVariant,
         );
       case TopicStatus.inProgress:
-        // mavi ton (info)
         return _ChipPalette(
           bg: scheme.primaryContainer,
           fg: scheme.onPrimaryContainer,
           border: scheme.primary,
         );
       case TopicStatus.done:
-        // yeşil ton (success) - theme’de yok, secondary ile güvenli ilerleyelim
         return _ChipPalette(
           bg: Colors.green.shade100,
           fg: Colors.green.shade900,
           border: Colors.green.shade600,
         );
       case TopicStatus.repeat:
-        // turuncu/sarı ton (warning) - tertiary ile güvenli
         return _ChipPalette(
           bg: scheme.tertiaryContainer,
           fg: scheme.onTertiaryContainer,

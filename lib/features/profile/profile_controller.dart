@@ -1,20 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'profile_storage.dart';
 
-enum UserRole { highSchool, university }
-enum GradeGroup { g9_10, g11_12 }
-enum Track { tm, mf, dil, sozel }
+// Sadece alanlar: MF/TM/Sözel/Dil
+enum Track { mf, tm, sozel, dil }
 
 class UserProfile {
-  final UserRole role;
-  final GradeGroup? gradeGroup;
-  final Track? track;
+  final Track track;
 
-  const UserProfile({
-    required this.role,
-    this.gradeGroup,
-    this.track,
-  });
+  const UserProfile({required this.track});
 }
 
 final profileStorageProvider = Provider<ProfileStorage>((ref) {

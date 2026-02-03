@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'todo_controller.dart';
-import 'notes_card.dart';
 
 class ProfileTodoSection extends ConsumerStatefulWidget {
   const ProfileTodoSection({super.key});
@@ -12,22 +11,11 @@ class ProfileTodoSection extends ConsumerStatefulWidget {
 }
 
 class _ProfileTodoSectionState extends ConsumerState<ProfileTodoSection> {
-  // TODO input
   final _todoCtrl = TextEditingController();
-
-  // Daily note input (NOTES kartı için)
-  late final TextEditingController _noteCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _noteCtrl = TextEditingController();
-  }
 
   @override
   void dispose() {
     _todoCtrl.dispose();
-    _noteCtrl.dispose();
     super.dispose();
   }
 
@@ -40,31 +28,10 @@ class _ProfileTodoSectionState extends ConsumerState<ProfileTodoSection> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // State -> Controller senkronu (cursor zıplamasını önler)
-    if (_noteCtrl.text != s.dailyNote) {
-      _noteCtrl.value = _noteCtrl.value.copyWith(
-        text: s.dailyNote,
-        selection: TextSelection.collapsed(offset: s.dailyNote.length),
-        composing: TextRange.empty,
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ✅ Eski TextField yerine NotesCard
-        NotesCard(
-          controller: _noteCtrl,
-          onChanged: c.setDailyNote,
-          title: 'NOTES',
-          hintText: 'Bugün için kendime not...',
-        ),
-
-        const SizedBox(height: 30),
-
-        const Text('TODO', style: TextStyle(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-
+        // TODO input
         Row(
           children: [
             Expanded(
@@ -93,6 +60,7 @@ class _ProfileTodoSectionState extends ConsumerState<ProfileTodoSection> {
 
         const SizedBox(height: 10),
 
+        // TODO list
         ...s.todos.map(
           (t) => Card(
             child: ListTile(
