@@ -30,6 +30,8 @@ final profileTodoProvider =
     NotifierProvider<ProfileTodoController, ProfileTodoState>(ProfileTodoController.new);
 
 class ProfileTodoController extends Notifier<ProfileTodoState> {
+  static const _ttl = Duration(hours: 24);
+
   @override
   ProfileTodoState build() {
     state = ProfileTodoState.empty;
@@ -42,18 +44,41 @@ class ProfileTodoController extends Notifier<ProfileTodoState> {
     return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
   }
 
+  bool _isExpired(TodoItem t, DateTime now) {
+    return now.difference(t.createdAt) > _ttl;
+  }
+
   Future<void> _init() async {
     final storage = ref.read(todoStorageProvider);
     final today = _todayKey();
-    final todos = await storage.loadTodos();
+
+    final loadedTodos = await storage.loadTodos();
+
+    // ✅ 24 saatten eski olanları temizle
+    final now = DateTime.now();
+    final freshTodos = loadedTodos.where((t) => !_isExpired(t, now)).toList(growable: false);
+
+    // ✅ temizlik yaptıysak kalıcı olarak storage'a da yaz
+    if (freshTodos.length != loadedTodos.length) {
+      await storage.saveTodos(freshTodos);
+    }
+
     final note = await storage.loadDailyNote(todayKey: today);
-    state = state.copyWith(todos: todos, dailyNote: note, loading: false);
+
+    state = state.copyWith(todos: freshTodos, dailyNote: note, loading: false);
   }
 
   Future<void> addTodo(String text) async {
     final t = text.trim();
     if (t.isEmpty) return;
-    final item = TodoItem(id: DateTime.now().millisecondsSinceEpoch.toString(), text: t, done: false);
+
+    final item = TodoItem(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: t,
+      done: false,
+      createdAt: DateTime.now(), // ✅
+    );
+
     final next = [item, ...state.todos];
     state = state.copyWith(todos: next);
     await ref.read(todoStorageProvider).saveTodos(next);

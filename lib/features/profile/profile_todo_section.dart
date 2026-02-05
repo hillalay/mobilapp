@@ -23,6 +23,7 @@ class _ProfileTodoSectionState extends ConsumerState<ProfileTodoSection> {
   Widget build(BuildContext context) {
     final s = ref.watch(profileTodoProvider);
     final c = ref.read(profileTodoProvider.notifier);
+    final theme = Theme.of(context);
 
     if (s.loading) {
       return const Center(child: CircularProgressIndicator());
@@ -31,6 +32,13 @@ class _ProfileTodoSectionState extends ConsumerState<ProfileTodoSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Başlık
+        Text(
+          'Bugün yapılacaklar',
+          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+
         // TODO input
         Row(
           children: [

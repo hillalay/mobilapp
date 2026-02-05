@@ -18,7 +18,7 @@ class DailyStudyStatsStorage {
     final key = _dayKey(date);
     final raw = box.get(key);
     if (raw == null) {
-      final empty = DailyStudyStats(dayKey: key, totalSeconds: 0);
+      final empty = DailyStudyStats(dayKey: key, totalSeconds: 0, manualQuestions: 0);
       await box.put(key, empty.toMap());
       return empty;
     }
@@ -36,28 +36,42 @@ class DailyStudyStatsStorage {
 
     final current = await getOrCreate(date);
 
-    // Negatif değer kontrolü - toplam süre negatif olmasın
     final newTotal = current.totalSeconds + seconds;
     if (newTotal < 0) {
-      // Eğer çıkarılacak süre toplam süreden fazlaysa, sadece sıfırla
       final updated = current.copyWith(totalSeconds: 0);
       await box.put(key, updated.toMap());
       return;
     }
 
-    final updated = current.copyWith(
-      totalSeconds: newTotal,
-    );
-
+    final updated = current.copyWith(totalSeconds: newTotal);
     await box.put(key, updated.toMap());
   }
 
-  // Manuel süre ekleme/çıkarma (negatif değer çıkarma için)
+  // Manuel süre ekleme/çıkarma
   Future<void> addManualMinutes({
     required DateTime date,
     required int minutes,
   }) async {
     await addSeconds(date: date, seconds: minutes * 60);
+  }
+
+  /// ✅ Manuel soru ekleme/çıkarma (dashboard toplam soru buradan gelecek)
+  Future<void> addManualQuestions({
+    required DateTime date,
+    required int questions,
+  }) async {
+    if (questions == 0) return;
+
+    final box = await _open();
+    final key = _dayKey(date);
+
+    final current = await getOrCreate(date);
+
+    final newTotal = current.manualQuestions + questions;
+    final clamped = newTotal < 0 ? 0 : newTotal;
+
+    final updated = current.copyWith(manualQuestions: clamped);
+    await box.put(key, updated.toMap());
   }
 
   Future<DailyStudyStats?> load(DateTime date) async {
@@ -68,23 +82,39 @@ class DailyStudyStatsStorage {
     return DailyStudyStats.fromMap(Map<String, dynamic>.from(raw));
   }
 
-  // Son 7 günün verilerini getir (grafik için)
+  // Son 7 gün (grafik için)
   Future<List<DailyStudyStats>> loadLastWeek() async {
     final box = await _open();
     final result = <DailyStudyStats>[];
-    
+
     for (int i = 6; i >= 0; i--) {
       final date = DateTime.now().subtract(Duration(days: i));
       final key = _dayKey(date);
       final raw = box.get(key);
-      
+
       if (raw != null) {
         result.add(DailyStudyStats.fromMap(Map<String, dynamic>.from(raw)));
       } else {
-        result.add(DailyStudyStats(dayKey: key, totalSeconds: 0));
+        result.add(DailyStudyStats(dayKey: key, totalSeconds: 0, manualQuestions: 0));
       }
     }
-    
+
     return result;
+  }
+
+  /// ✅ TOPLAM SORU: sadece manualQuestions birikimi
+  Future<int> loadTotalManualQuestions() async {
+    final box = await _open();
+    int sum = 0;
+
+    for (final k in box.keys) {
+      final raw = box.get(k);
+      if (raw == null) continue;
+
+      final map = Map<String, dynamic>.from(raw);
+      sum += (map['manualQuestions'] as int?) ?? 0;
+    }
+
+    return sum;
   }
 }

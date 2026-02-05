@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import 'dashboard_providers.dart';
 import '../timer/daily_study_stats_providers.dart';
-import '../timer/daily_study_stats_storage.dart';
+import '../timer/daily_study_stats.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -14,16 +13,34 @@ class DashboardPage extends ConsumerStatefulWidget {
   ConsumerState<DashboardPage> createState() => _DashboardPageState();
 }
 
+enum Op { add, sub }
+
 class _DashboardPageState extends ConsumerState<DashboardPage> {
   final _manualHoursController = TextEditingController();
   final _manualMinutesController = TextEditingController();
+  final _manualQuestionsController = TextEditingController();
+
+  Op _timeOp = Op.add;
+  Op _qOp = Op.add;
 
   @override
   void dispose() {
     _manualHoursController.dispose();
     _manualMinutesController.dispose();
+    _manualQuestionsController.dispose();
     super.dispose();
   }
+
+  InputDecoration _modernDeco(String label) => InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      );
 
   Future<void> _addOrSubtractTime({required bool isAdd}) async {
     final hours = int.tryParse(_manualHoursController.text) ?? 0;
@@ -42,9 +59,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final totalMinutes = (hours * 60) + minutes;
     final finalMinutes = isAdd ? totalMinutes : -totalMinutes;
 
-    await ref
-        .read(dailyStatsStorageProvider)
-        .addManualMinutes(date: DateTime.now(), minutes: finalMinutes);
+    await ref.read(dailyStatsStorageProvider).addManualMinutes(
+          date: DateTime.now(),
+          minutes: finalMinutes,
+        );
 
     ref.invalidate(todayStatsProvider);
 
@@ -63,12 +81,52 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         ),
       );
     }
+
+    setState(() {});
+  }
+
+  Future<void> _addOrSubtractQuestions({required bool isAdd}) async {
+    final q = int.tryParse(_manualQuestionsController.text) ?? 0;
+
+    if (q <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lütfen soru sayısı girin'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final finalQ = isAdd ? q : -q;
+
+    await ref.read(dailyStatsStorageProvider).addManualQuestions(
+          date: DateTime.now(),
+          questions: finalQ,
+        );
+
+    // ✅ toplam soru kartı anında güncellensin
+    ref.invalidate(dashboardTotalQuestionsProvider);
+
+    _manualQuestionsController.clear();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isAdd ? '✓ $q soru eklendi!' : '✓ $q soru çıkarıldı!'),
+          backgroundColor: isAdd ? Colors.blue : Colors.orange,
+        ),
+      );
+    }
+
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final summaryAsync = ref.watch(dashboardSummaryProvider);
     final todayAsync = ref.watch(todayStatsProvider);
+    final totalQAsync = ref.watch(dashboardTotalQuestionsProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Dashboard')),
@@ -81,50 +139,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // İstatistik kartları
                 todayAsync.when(
-                  loading: () => Row(
-                    children: [
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Bugün',
-                          value: '0sa 0dk',
-                          icon: Icons.today_outlined,
-                          variant: _CardVariant.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Toplam Soru',
-                          value: '${s.totalQuestions}',
-                          icon: Icons.edit_note_outlined,
-                          variant: _CardVariant.neutral,
-                        ),
-                      ),
-                    ],
-                  ),
-                  error: (e, _) => Row(
-                    children: [
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Bugün',
-                          value: '0sa 0dk',
-                          icon: Icons.today_outlined,
-                          variant: _CardVariant.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _StatCard(
-                          title: 'Toplam Soru',
-                          value: '${s.totalQuestions}',
-                          icon: Icons.edit_note_outlined,
-                          variant: _CardVariant.neutral,
-                        ),
-                      ),
-                    ],
-                  ),
+                  loading: () =>
+                      _topRowCards(todayText: '0sa 0dk', totalQAsync: totalQAsync),
+                  error: (e, _) =>
+                      _topRowCards(todayText: '0sa 0dk', totalQAsync: totalQAsync),
                   data: (stats) {
                     String fmt(int seconds) {
                       final h = seconds ~/ 3600;
@@ -133,26 +152,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       return '${h}sa ${m}dk';
                     }
 
-                    return Row(
-                      children: [
-                        Expanded(
-                          child: _StatCard(
-                            title: 'Bugün',
-                            value: fmt(stats?.totalSeconds ?? 0),
-                            icon: Icons.today_outlined,
-                            variant: _CardVariant.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _StatCard(
-                            title: 'Toplam Soru',
-                            value: '${s.totalQuestions}',
-                            icon: Icons.edit_note_outlined,
-                            variant: _CardVariant.neutral,
-                          ),
-                        ),
-                      ],
+                    return _topRowCards(
+                      todayText: fmt(stats?.totalSeconds ?? 0),
+                      totalQAsync: totalQAsync,
                     );
                   },
                 ),
@@ -178,75 +180,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 16),
-
-                // ✅ YENİ: Haftalık Grafik + Manuel Süre Ekleme
                 const Text(
                   'Son 7 Gün',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 12),
-                _buildWeeklyChartWithManualInput(),
-
-                const SizedBox(height: 24),
-
-                // ✅ Hızlı Erişim Bölümü
-                const Text(
-                  'Hızlı Erişim',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Kronometre
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.timer, color: Colors.green),
-                    title: const Text('Kronometre'),
-                    subtitle: const Text('Çalışma süresini ölç'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/timer'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Denemeler
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.quiz, color: Colors.blue),
-                    title: const Text('Denemeler'),
-                    subtitle: const Text('TYT/AYT denemeleri'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/exams'),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Konular
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.book, color: Colors.orange),
-                    title: const Text('Konular'),
-                    subtitle: const Text('Konu takibi'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/topics'),
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Not: Şimdilik bu özet "konu progress" üzerinden hesaplanıyor.',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ),
+                _buildWeeklyCard(),
               ],
             ),
           ),
@@ -255,93 +195,183 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     );
   }
 
-  Widget _buildWeeklyChartWithManualInput() {
+  Widget _topRowCards({
+    required String todayText,
+    required AsyncValue<int> totalQAsync,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCard(
+            title: 'Bugün',
+            value: todayText,
+            icon: Icons.today_outlined,
+            variant: _CardVariant.primary,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: totalQAsync.when(
+            loading: () => const _StatCard(
+              title: 'Toplam Soru',
+              value: '…',
+              icon: Icons.edit_note_outlined,
+              variant: _CardVariant.neutral,
+            ),
+            error: (e, _) => const _StatCard(
+              title: 'Toplam Soru',
+              value: '0',
+              icon: Icons.edit_note_outlined,
+              variant: _CardVariant.neutral,
+            ),
+            data: (q) => _StatCard(
+              title: 'Toplam Soru',
+              value: '$q',
+              icon: Icons.edit_note_outlined,
+              variant: _CardVariant.neutral,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWeeklyCard() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Manuel Süre Ekleme
-            const Row(
-              children: [
-                Icon(Icons.add_circle_outline, color: Colors.green, size: 18),
-                SizedBox(width: 6),
-                Text(
-                  'Manuel Süre Ekle',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
+            // ✅ Süre Ekle/Çıkar
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.25),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _manualHoursController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Saat',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.timer_outlined,
+                          size: 18, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 8),
+                      const Text('Çalışma Süresi',
+                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      const Spacer(),
+                      SegmentedButton<Op>(
+                        segments: const [
+                          ButtonSegment(value: Op.add, label: Text('Ekle')),
+                          ButtonSegment(value: Op.sub, label: Text('Çıkar')),
+                        ],
+                        selected: {_timeOp},
+                        onSelectionChanged: (s) => setState(() => _timeOp = s.first),
+                        showSelectedIcon: false,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _manualMinutesController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Dakika',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _manualHoursController,
+                          keyboardType: TextInputType.number,
+                          decoration: _modernDeco('Saat'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _manualMinutesController,
+                          keyboardType: TextInputType.number,
+                          decoration: _modernDeco('Dakika'),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _addOrSubtractTime(isAdd: true),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Ekle'),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: () => _addOrSubtractTime(isAdd: _timeOp == Op.add),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Uygula'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      minimumSize: const Size.fromHeight(44),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _addOrSubtractTime(isAdd: false),
-                    icon: const Icon(Icons.remove, size: 18),
-                    label: const Text('Çıkar'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
 
-            const SizedBox(height: 20),
-            const Divider(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // Grafik
-            FutureBuilder(
+            // ✅ Soru Ekle/Çıkar
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.edit_note_outlined,
+                          size: 18, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 8),
+                      const Text('Soru Sayısı',
+                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      const Spacer(),
+                      SegmentedButton<Op>(
+                        segments: const [
+                          ButtonSegment(value: Op.add, label: Text('Ekle')),
+                          ButtonSegment(value: Op.sub, label: Text('Çıkar')),
+                        ],
+                        selected: {_qOp},
+                        onSelectionChanged: (s) => setState(() => _qOp = s.first),
+                        showSelectedIcon: false,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _manualQuestionsController,
+                    keyboardType: TextInputType.number,
+                    decoration: _modernDeco('Soru'),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: () => _addOrSubtractQuestions(isAdd: _qOp == Op.add),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Uygula'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 10),
+            const Divider(),
+            const SizedBox(height: 14),
+
+            FutureBuilder<List<DailyStudyStats>>(
               future: ref.read(dailyStatsStorageProvider).loadLastWeek(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
@@ -352,27 +382,25 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 }
 
                 final weekData = snapshot.data!;
-                final totalWeekSeconds = weekData.fold(
-                  0,
-                  (int sum, day) => sum + day.totalSeconds,
-                );
+                final totalWeekSeconds =
+                    weekData.fold<int>(0, (sum, d) => sum + d.totalSeconds);
 
                 if (totalWeekSeconds == 0) {
-                  return Padding(
-                    padding: const EdgeInsets.all(40),
+                  return const Padding(
+                    padding: EdgeInsets.all(40),
                     child: Center(
-                      child: Text(
-                        'Henüz veri yok',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
+                      child: Text('Henüz veri yok', style: TextStyle(color: Colors.grey)),
                     ),
                   );
                 }
 
+                final totalWeekQuestions =
+                    weekData.fold<int>(0, (sum, d) => sum + d.manualQuestions);
+
                 return Column(
                   children: [
                     SizedBox(
-                      height: 200,
+                      height: 220,
                       child: PieChart(
                         PieChartData(
                           sectionsSpace: 2,
@@ -381,36 +409,65 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+
+                    // ✅ Altta Pzt/Sal/Çar chipleri
+                    const SizedBox(height: 12),
                     Wrap(
-                      spacing: 12,
+                      spacing: 8,
                       runSpacing: 8,
                       alignment: WrapAlignment.center,
                       children: List.generate(7, (i) {
                         final day = weekData[i];
-                        final hours = day.totalSeconds ~/ 3600;
-                        final minutes = (day.totalSeconds % 3600) ~/ 60;
+                        final h = day.totalSeconds ~/ 3600;
+                        final m = (day.totalSeconds % 3600) ~/ 60;
                         final dayName = _getDayName(i);
+                        final timeText = h == 0 ? '${m}dk' : '${h}sa ${m}dk';
 
-                        return Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: _getColorForDay(i),
-                                shape: BoxShape.circle,
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: _getColorForDay(i),
+                                  shape: BoxShape.circle,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '$dayName: ${hours}s ${minutes}dk',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
+                              const SizedBox(width: 8),
+                              Text(
+                                '$dayName • $timeText',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
                         );
                       }),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ✅ Toplam soru
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      ),
+                      child: Text(
+                        'Son 7 Gün Toplam Soru: $totalWeekQuestions',
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ],
                 );
@@ -422,19 +479,24 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     );
   }
 
-  List<PieChartSectionData> _buildPieChartSections(List weekData) {
+  // ✅ Dilimde saat/dk
+  List<PieChartSectionData> _buildPieChartSections(List<DailyStudyStats> weekData) {
     return List.generate(7, (i) {
       final seconds = weekData[i].totalSeconds;
       if (seconds == 0) return null;
 
+      final h = seconds ~/ 3600;
+      final m = (seconds % 3600) ~/ 60;
+      final title = h > 0 ? '${h}sa' : '${m}dk';
+
       return PieChartSectionData(
         value: seconds.toDouble(),
-        title: '${seconds ~/ 3600}s',
+        title: title,
         color: _getColorForDay(i),
         radius: 50,
         titleStyle: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
           color: Colors.white,
         ),
       );
@@ -443,17 +505,18 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   Color _getColorForDay(int index) {
     final colors = [
-      Colors.blue.shade400,
-      Colors.green.shade400,
-      Colors.orange.shade400,
-      Colors.purple.shade400,
-      Colors.pink.shade400,
-      Colors.teal.shade400,
-      Colors.indigo.shade400,
+      Colors.blueAccent,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.pink,
+      Colors.teal,
+      Colors.indigo,
     ];
     return colors[index % colors.length];
   }
 
+  // ✅ Son 7 güne göre kayan gün adı (today bazlı)
   String _getDayName(int index) {
     final days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
     final today = DateTime.now().weekday - 1;
@@ -493,10 +556,7 @@ class _StatCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: TextStyle(fontSize: 12, color: palette.subtle),
-                  ),
+                  Text(title, style: TextStyle(fontSize: 12, color: palette.subtle)),
                   const SizedBox(height: 6),
                   Text(
                     value,

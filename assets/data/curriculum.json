@@ -210,12 +210,40 @@
       ],
       
       "Kimya": [
+        "Kimya Bilimi",
+        "Atom ve Yapısı",
         "Periyodik Sistem",
-        "Kimyasal Türler Arası Etkileşimler"
+        "Kimyasal Türler Arası Etkileşim",
+        "Kimyasal Hesaplamalar",
+        "Modern Atom Teorisi",
+        "Gazlar",
+        "Sıvı Çözeltiler",
+        "Kimyasal Tepkimelerde Enerji",
+        "Kimyasal Tepkimelerde Hız",
+        "Kimyasal Denge",
+        "Asit-Baz Dengesi",
+        "Çözünürlük Dengesi",
+        "Kimya ve Elektrik",
+        "Organik Kimya"
       ],
       "Biyoloji": [
-        "Hücre ve Organelleri",
-        "Kalıtım"
+        "Sinir Sistemi",
+        "Endokrin Sistemi",
+        "Duyu Organları",
+        "Destek ve Hareket Sistemi",
+        "Sindirim Sistemi",
+        "Dolaşım Sistemi",
+        "Solunum Sistemi",
+        "Ürin Sistemi",
+        "Üreme Sistemı ve Embriyonik Gelişim",
+        "Komünite ve Popülasyon Ekolojisi",
+        "Nükleik Asitler",
+        "Genetik Şifre ve Protein Sentezi",
+        "Canlılık ve Enerji",
+        "Fotosentez ve Kemosentez",
+        "Hücre Solunumu",
+        "Bitki Biyolojisi",
+        "Canlılar ve Çevre"
       ]
     },
     "tm": {

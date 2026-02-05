@@ -50,25 +50,42 @@ class StopwatchNotifier extends Notifier<StopwatchState> {
       _timer?.cancel();
     });
     
-    _loadActiveSession();
+    // ✅ DÜZELTME: Aktif session'ı yükleme ama otomatik başlatma
+    _loadActiveSessionWithoutAutoStart();
+    
     return const StopwatchState();
   }
 
   StudySessionStorage get _storage => ref.read(studySessionStorageProvider);
   DailyStudyStatsStorage get _dailyStats => ref.read(dailyStatsStorageProvider);
 
-  Future<void> _loadActiveSession() async {
+  // ✅ YENİ FONKSİYON: Session'ı yükle ama timer'ı başlatma
+  Future<void> _loadActiveSessionWithoutAutoStart() async {
     final active = await _storage.getActive();
     if (active != null) {
       final elapsed = DateTime.now().difference(active.startTime).inSeconds;
       state = state.copyWith(
         seconds: elapsed,
-        isRunning: true,
+        isRunning: false, // ✅ ÖNEMLİ: Her zaman false olarak başlat
         activeSession: active,
       );
-      _startTimer();
+      // ✅ _startTimer() çağrısını KALDIRDIK - Artık otomatik başlamayacak
     }
   }
+
+  // ❌ ESKİ FONKSİYON (artık kullanılmıyor, silebilirsiniz)
+  // Future<void> _loadActiveSession() async {
+  //   final active = await _storage.getActive();
+  //   if (active != null) {
+  //     final elapsed = DateTime.now().difference(active.startTime).inSeconds;
+  //     state = state.copyWith(
+  //       seconds: elapsed,
+  //       isRunning: true,  // ← SORUN BURASI
+  //       activeSession: active,
+  //     );
+  //     _startTimer();  // ← VE BURASI
+  //   }
+  // }
 
   Future<void> start() async {
     if (state.isRunning) return;
