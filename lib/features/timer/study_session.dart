@@ -9,12 +9,19 @@ class StudySession {
   /// Son "Başlat/Devam" anı. null ise kronometre duraklatılmış demektir.
   final DateTime? resumedAt;
 
+  /// Günlük istatistiklere şu ana kadar yazılmış saniye. Kronometre çalışırken
+  /// dakikada bir kısmi yazma yapılıyor; `stop()` yalnızca kalanı ekleyebilsin
+  /// diye burada tutuluyor. Hive'a yazılıyor ki uygulama kapanıp açılsa da
+  /// aynı süre iki kez sayılmasın.
+  final int flushedSeconds;
+
   const StudySession({
     required this.id,
     required this.startTime,
     this.endTime,
     required this.durationSeconds,
     this.resumedAt,
+    this.flushedSeconds = 0,
   });
 
   bool get isActive => endTime == null;
@@ -40,6 +47,7 @@ class StudySession {
         'endTime': endTime?.toIso8601String(),
         'durationSeconds': durationSeconds,
         'resumedAt': resumedAt?.toIso8601String(),
+        'flushedSeconds': flushedSeconds,
       };
 
   static StudySession fromMap(Map<String, dynamic> map) => StudySession(
@@ -49,5 +57,6 @@ class StudySession {
         durationSeconds: (map['durationSeconds'] ?? 0) as int,
         resumedAt:
             map['resumedAt'] == null ? null : DateTime.parse(map['resumedAt'] as String),
+        flushedSeconds: (map['flushedSeconds'] ?? 0) as int,
       );
 }

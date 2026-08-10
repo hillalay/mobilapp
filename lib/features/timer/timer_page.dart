@@ -3,7 +3,9 @@ import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/auth_providers.dart';
 import 'stopwatch_controller.dart';
 
 class TimerPage extends ConsumerWidget {
@@ -20,6 +22,15 @@ class TimerPage extends ConsumerWidget {
         title: const Text('Kronometre'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        actions: [
+          // Supabase yapılandırılmamışsa liderlik tablosu da yok.
+          if (ref.watch(supabaseClientProvider) != null)
+            IconButton(
+              icon: const Icon(Icons.emoji_events_outlined),
+              tooltip: 'Liderlik Tablosu',
+              onPressed: () => context.push('/timer/leaderboard'),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Padding(

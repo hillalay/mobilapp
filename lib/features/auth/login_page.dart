@@ -15,6 +15,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
+  final _username = TextEditingController();
 
   bool _signUp = false;
   bool _busy = false;
@@ -24,6 +25,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void dispose() {
     _email.dispose();
     _password.dispose();
+    _username.dispose();
     super.dispose();
   }
 
@@ -43,7 +45,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       final password = _password.text;
 
       if (_signUp) {
-        final res = await client.auth.signUp(email: email, password: password);
+        // Kullanıcı adı metadata'ya yazılıyor; profiles satırını
+        // on_auth_user_created trigger'ı açıyor (bkz. 0002_leaderboard.sql).
+        // Ad çakışırsa signUp'ın kendisi hata verir, yarım hesap kalmaz.
+        final res = await client.auth.signUp(
+          email: email,
+          password: password,
+          data: {'username': _username.text.trim()},
+        );
         if (res.session == null) {
           // E-posta doğrulaması açıksa oturum hemen gelmez.
           setState(() {
@@ -60,7 +69,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       // gelmeden onboarding'e düşmesin. Tazeleme syncBootstrapProvider'da.
       await ref.read(syncEngineProvider)?.start();
     } on AuthException catch (e) {
-      setState(() => _error = e.message);
+      // Kullanıcı adı çakışınca trigger patlıyor, GoTrue bunu genel bir
+      // "Database error saving new user" olarak döndürüyor. Kayıt akışında
+      // tek DB hatası bu olduğu için anlaşılır mesaja çeviriyoruz.
+      final duplicateUsername =
+          _signUp && e.message.toLowerCase().contains('database error');
+      setState(() => _error = duplicateUsername
+          ? 'Bu kullanıcı adı alınmış, başka bir tane dene.'
+          : e.message);
     } catch (e) {
       setState(() => _error = 'Bağlantı hatası: $e');
     } finally {
@@ -88,6 +104,27 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
+                  if (_signUp) ...[
+                    TextFormField(
+                      controller: _username,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Kullanıcı adı',
+                        helperText: 'Liderlik tablosunda görünecek',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) {
+                        final s = v?.trim() ?? '';
+                        if (s.length < 3) return 'En az 3 karakter olmalı';
+                        if (s.length > 20) return 'En fazla 20 karakter olabilir';
+                        if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(s)) {
+                          return 'Sadece harf, rakam ve alt çizgi kullan';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   TextFormField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,

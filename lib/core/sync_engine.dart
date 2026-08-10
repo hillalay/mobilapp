@@ -40,7 +40,14 @@ class SyncEngine {
   static const _cursorKey = 'lastPulledAt';
 
   static const _debounce = Duration(seconds: 2);
-  static const _retryEvery = Duration(seconds: 30);
+
+  /// Kirli kayıt varken bu aralıkla gönderiliyor. Kronometre çalışırken
+  /// dakikada bir kısmi yazma geldiği için liderlik tablosu yarım dakikadan
+  /// fazla geride kalmıyor.
+  static const _tickEvery = Duration(seconds: 30);
+
+  /// Çekme daha seyrek: kirli kayıt yoksa ağ trafiği boşuna harcanmasın.
+  static const _pullEveryTicks = 4; // 4 x 30 sn = 2 dk
 
   /// Senkronlanan tüm kutular main() içinde açılır: hem `watch()` dinleyebilmek
   /// hem de kronometrenin ilk karede senkron okuyabilmesi için.
@@ -82,7 +89,7 @@ class SyncEngine {
       }));
     }
 
-    _retryTimer = Timer.periodic(_retryEvery, (_) => flush());
+    _retryTimer = Timer.periodic(_tickEvery, (_) => _tick());
 
     await pull();
     await push();
@@ -117,6 +124,15 @@ class SyncEngine {
   Future<void> flush() async {
     await pull();
     await push();
+  }
+
+  int _ticks = 0;
+
+  /// 30 sn'de bir: kirli kayıt varsa hemen gönder, çekmeyi 2 dakikada bir yap.
+  Future<void> _tick() async {
+    _ticks++;
+    if (_dirty.isNotEmpty) await push();
+    if (_ticks % _pullEveryTicks == 0) await pull();
   }
 
   // ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import '../features/exams/exam_branch_edit_page.dart';
 
 import '../core/auth_providers.dart';
 import '../features/auth/login_page.dart';
+import '../features/leaderboard/leaderboard_page.dart';
 
 import '../features/profile/onboarding_page.dart';
 import '../features/profile/profile_controller.dart';
@@ -91,6 +92,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/stopwatch',
             builder: (context, state) => const StopwatchPage(),
+          ),
+          // '/timer' altında: alt menüde Kronometre sekmesi seçili kalsın.
+          GoRoute(
+            path: '/timer/leaderboard',
+            builder: (context, state) => const LeaderboardPage(),
           ),
 
           GoRoute(

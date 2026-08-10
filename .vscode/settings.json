@@ -1,0 +1,6 @@
+{
+  // windows/runner altındaki C++ dosyaları Flutter'ın ürettiği iskelet kod.
+  // C/C++ eklentisi Windows SDK başlıklarını bulamayıp sahte hata gösteriyor;
+  // gerçek derlemeyi MSVC yapıyor ve o sorunsuz. Squiggle'ları kapatıyoruz.
+  "C_Cpp.errorSquiggles": "disabled"
+}

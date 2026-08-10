@@ -25,9 +25,13 @@ class DailyStudyStatsStorage {
     return DailyStudyStats.fromMap(Map<String, dynamic>.from(raw));
   }
 
+  /// [fromStopwatch] yalnızca kronometre kaydederken true olur; o zaman süre
+  /// `stopwatchSeconds`'a da eklenir. Manuel girişler sadece `totalSeconds`'ı
+  /// değiştirir, böylece liderlik tablosu elle girilen saatlerden etkilenmez.
   Future<void> addSeconds({
     required DateTime date,
     required int seconds,
+    bool fromStopwatch = false,
   }) async {
     if (seconds == 0) return;
 
@@ -37,13 +41,14 @@ class DailyStudyStatsStorage {
     final current = await getOrCreate(date);
 
     final newTotal = current.totalSeconds + seconds;
-    if (newTotal < 0) {
-      final updated = current.copyWith(totalSeconds: 0);
-      await box.put(key, updated.toMap());
-      return;
-    }
+    final newStopwatch = fromStopwatch
+        ? current.stopwatchSeconds + seconds
+        : current.stopwatchSeconds;
 
-    final updated = current.copyWith(totalSeconds: newTotal);
+    final updated = current.copyWith(
+      totalSeconds: newTotal < 0 ? 0 : newTotal,
+      stopwatchSeconds: newStopwatch < 0 ? 0 : newStopwatch,
+    );
     await box.put(key, updated.toMap());
   }
 

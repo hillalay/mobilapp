@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth_providers.dart';
+import 'avatar_section.dart';
 import 'profile_todo_section.dart';
 import 'heatmap_section.dart';
 
@@ -62,12 +63,9 @@ class ProfilePage extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (user?.email != null) ...[
-                Text(
-                  user!.email!,
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                ),
-                const SizedBox(height: 16),
+              if (user != null) ...[
+                const AvatarSection(),
+                const SizedBox(height: 24),
               ],
 
               // ✅ NOTES + TODO
