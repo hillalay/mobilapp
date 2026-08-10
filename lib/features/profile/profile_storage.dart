@@ -2,11 +2,11 @@ import 'package:hive/hive.dart';
 import 'profile_controller.dart';
 
 class ProfileStorage {
-  static const _boxName = 'profile_box';
+  static const boxName = 'profile_box';
   static const _key = 'profile';
 
   Future<Box> _open() async {
-    return Hive.openBox(_boxName);
+    return Hive.openBox(boxName);
   }
 
   Future<void> save(UserProfile profile) async {

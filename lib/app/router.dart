@@ -15,6 +15,9 @@ import '../features/exams/exams_analysis_page.dart';
 import '../features/exams/exam_general_edit_page.dart';
 import '../features/exams/exam_branch_edit_page.dart';
 
+import '../core/auth_providers.dart';
+import '../features/auth/login_page.dart';
+
 import '../features/profile/onboarding_page.dart';
 import '../features/profile/profile_controller.dart';
 import '../features/profile/profile_page.dart';
@@ -27,16 +30,23 @@ import '../features/topics/topics_page.dart';
 final goRouterProvider = Provider<GoRouter>((ref) {
   // Profil state’ini dinle: değişince redirect tekrar çalışsın
   final profileAsync = ref.watch(profileProvider);
+  // Supabase yapılandırılmamışsa false kalır; uygulama yerel çalışmaya devam eder.
+  final requiresLogin = ref.watch(requiresLoginProvider);
 
   return GoRouter(
     initialLocation: '/onboarding',
     redirect: (context, state) {
-      final goingToOnboarding = state.matchedLocation == '/onboarding';
+      final location = state.matchedLocation;
+      final goingToLogin = location == '/login';
+      final goingToOnboarding = location == '/onboarding';
+
+      if (requiresLogin) return goingToLogin ? null : '/login';
 
       if (profileAsync.isLoading) return null;
 
       final hasProfile = profileAsync.value != null;
 
+      if (goingToLogin) return hasProfile ? '/dashboard' : '/onboarding';
       if (!hasProfile && !goingToOnboarding) return '/onboarding';
       if (hasProfile && goingToOnboarding) return '/dashboard';
 
@@ -50,6 +60,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           final hasProfile = profileAsync.value != null;
           return hasProfile ? '/dashboard' : '/onboarding';
         },
+      ),
+
+      // Giriş (bottom bar YOK)
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginPage(),
       ),
 
       // Onboarding (bottom bar YOK)

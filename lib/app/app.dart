@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/auth_providers.dart';
 import 'router.dart';
 
 class MobilApp extends ConsumerWidget {
@@ -7,6 +8,9 @@ class MobilApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Oturum açılınca senkronu başlatır, kapanınca durdurur.
+    ref.watch(syncBootstrapProvider);
+
     final router = ref.watch(goRouterProvider);
 
     return MaterialApp.router(

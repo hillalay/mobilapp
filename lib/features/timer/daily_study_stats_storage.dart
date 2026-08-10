@@ -2,9 +2,9 @@ import 'package:hive/hive.dart';
 import 'daily_study_stats.dart';
 
 class DailyStudyStatsStorage {
-  static const _boxName = 'daily_study_stats_box';
+  static const boxName = 'daily_study_stats_box';
 
-  Future<Box> _open() async => Hive.openBox(_boxName);
+  Future<Box> _open() async => Hive.openBox(boxName);
 
   String _dayKey(DateTime d) {
     final y = d.year.toString().padLeft(4, '0');

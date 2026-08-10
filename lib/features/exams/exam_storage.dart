@@ -2,9 +2,9 @@ import 'package:hive/hive.dart';
 import 'exam_models.dart';
 
 class ExamStorage {
-  static const _boxName = 'exams_box';
+  static const boxName = 'exams_box';
 
-  Future<Box> _open() async => Hive.openBox(_boxName);
+  Future<Box> _open() async => Hive.openBox(boxName);
 
   Future<void> add(ExamEntry entry) async {
     final box = await _open();

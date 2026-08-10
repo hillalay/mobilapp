@@ -2,16 +2,31 @@ class StudySession {
   final String id;
   final DateTime startTime;
   final DateTime? endTime;
+
+  /// Duraklamalar hariç, o ana kadar birikmiş süre.
   final int durationSeconds;
+
+  /// Son "Başlat/Devam" anı. null ise kronometre duraklatılmış demektir.
+  final DateTime? resumedAt;
 
   const StudySession({
     required this.id,
     required this.startTime,
     this.endTime,
     required this.durationSeconds,
+    this.resumedAt,
   });
 
   bool get isActive => endTime == null;
+
+  bool get isRunning => endTime == null && resumedAt != null;
+
+  /// Tek doğruluk kaynağı: birikmiş süre + (çalışıyorsa) devam ettirmeden bu yana geçen süre.
+  /// Duvar saatinden hesaplandığı için uygulama kapansa da doğru kalır.
+  int get elapsedSeconds {
+    if (!isRunning) return durationSeconds;
+    return durationSeconds + DateTime.now().difference(resumedAt!).inSeconds;
+  }
 
   String get formattedDuration {
     final hours = durationSeconds ~/ 3600;
@@ -24,6 +39,7 @@ class StudySession {
         'startTime': startTime.toIso8601String(),
         'endTime': endTime?.toIso8601String(),
         'durationSeconds': durationSeconds,
+        'resumedAt': resumedAt?.toIso8601String(),
       };
 
   static StudySession fromMap(Map<String, dynamic> map) => StudySession(
@@ -31,5 +47,7 @@ class StudySession {
         startTime: DateTime.parse(map['startTime'] as String),
         endTime: map['endTime'] == null ? null : DateTime.parse(map['endTime'] as String),
         durationSeconds: (map['durationSeconds'] ?? 0) as int,
+        resumedAt:
+            map['resumedAt'] == null ? null : DateTime.parse(map['resumedAt'] as String),
       );
 }

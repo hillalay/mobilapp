@@ -7,32 +7,18 @@ import 'daily_study_stats_storage.dart';
 import 'daily_study_stats_providers.dart';
 
 class StopwatchState {
-  final int seconds;
-  final bool isRunning;
-  final StudySession? activeSession;
+  final StudySession? session;
 
-  const StopwatchState({
-    this.seconds = 0,
-    this.isRunning = false,
-    this.activeSession,
-  });
+  const StopwatchState({this.session});
 
-  StopwatchState copyWith({
-    int? seconds,
-    bool? isRunning,
-    StudySession? activeSession,
-  }) {
-    return StopwatchState(
-      seconds: seconds ?? this.seconds,
-      isRunning: isRunning ?? this.isRunning,
-      activeSession: activeSession ?? this.activeSession,
-    );
-  }
+  int get seconds => session?.elapsedSeconds ?? 0;
+  bool get isRunning => session?.isRunning ?? false;
 
   String get formattedTime {
-    final hours = seconds ~/ 3600;
-    final minutes = (seconds % 3600) ~/ 60;
-    final secs = seconds % 60;
+    final s = seconds;
+    final hours = s ~/ 3600;
+    final minutes = (s % 3600) ~/ 60;
+    final secs = s % 60;
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 }
@@ -42,135 +28,99 @@ final stopwatchProvider = NotifierProvider<StopwatchNotifier, StopwatchState>(
 );
 
 class StopwatchNotifier extends Notifier<StopwatchState> {
-  Timer? _timer;
+  Timer? _ticker;
 
   @override
   StopwatchState build() {
-    ref.onDispose(() {
-      _timer?.cancel();
-    });
-    
-    // ✅ DÜZELTME: Aktif session'ı yükleme ama otomatik başlatma
-    _loadActiveSessionWithoutAutoStart();
-    
-    return const StopwatchState();
+    ref.onDispose(() => _ticker?.cancel());
+
+    // Kaydedilmiş oturumu senkron geri yükle: uygulama kapanıp açılsa da
+    // kronometre kaldığı yerden devam eder, sıfırlanmaz.
+    final active = _storage.getActive();
+    if (active != null && active.isRunning) _startTicker();
+    return StopwatchState(session: active);
   }
 
   StudySessionStorage get _storage => ref.read(studySessionStorageProvider);
   DailyStudyStatsStorage get _dailyStats => ref.read(dailyStatsStorageProvider);
 
-  // ✅ YENİ FONKSİYON: Session'ı yükle ama timer'ı başlatma
-  Future<void> _loadActiveSessionWithoutAutoStart() async {
-    final active = await _storage.getActive();
-    if (active != null) {
-      final elapsed = DateTime.now().difference(active.startTime).inSeconds;
-      state = state.copyWith(
-        seconds: elapsed,
-        isRunning: false, // ✅ ÖNEMLİ: Her zaman false olarak başlat
-        activeSession: active,
-      );
-      // ✅ _startTimer() çağrısını KALDIRDIK - Artık otomatik başlamayacak
-    }
-  }
-
-  // ❌ ESKİ FONKSİYON (artık kullanılmıyor, silebilirsiniz)
-  // Future<void> _loadActiveSession() async {
-  //   final active = await _storage.getActive();
-  //   if (active != null) {
-  //     final elapsed = DateTime.now().difference(active.startTime).inSeconds;
-  //     state = state.copyWith(
-  //       seconds: elapsed,
-  //       isRunning: true,  // ← SORUN BURASI
-  //       activeSession: active,
-  //     );
-  //     _startTimer();  // ← VE BURASI
-  //   }
-  // }
-
-  Future<void> start() async {
-    if (state.isRunning) return;
-
-    // Durakladıktan sonra devam ediyoruz
-    if (state.activeSession != null) {
-      state = state.copyWith(isRunning: true);
-      _startTimer();
-      return;
-    }
-
-    // Yeni session başlat
-    final session = StudySession(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      startTime: DateTime.now(),
-      durationSeconds: 0,
-    );
-
-    await _storage.save(session);
-
-    state = state.copyWith(
-      isRunning: true,
-      seconds: 0,
-      activeSession: session,
-    );
-
-    _startTimer();
-  }
-
-  void _startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      state = state.copyWith(seconds: state.seconds + 1);
+  /// Sayaç sadece ekranı tazeler; süre her zaman [StudySession.elapsedSeconds]
+  /// üzerinden duvar saatinden hesaplanır. Tick kaçırmak süreyi bozmaz.
+  void _startTicker() {
+    _ticker?.cancel();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      state = StopwatchState(session: state.session);
     });
   }
 
-  Future<void> pause() async {
-    if (!state.isRunning) return;
+  void start() {
+    final current = state.session;
+    if (current != null && current.isRunning) return;
 
-    _timer?.cancel();
+    final now = DateTime.now();
+    final session = current == null
+        ? StudySession(
+            id: now.millisecondsSinceEpoch.toString(),
+            startTime: now,
+            durationSeconds: 0,
+            resumedAt: now,
+          )
+        : StudySession(
+            id: current.id,
+            startTime: current.startTime,
+            durationSeconds: current.durationSeconds,
+            resumedAt: now,
+          );
 
-    final session = state.activeSession;
-    if (session != null) {
-      final updated = StudySession(
-        id: session.id,
-        startTime: session.startTime,
-        endTime: null,
-        durationSeconds: state.seconds,
-      );
-      await _storage.save(updated);
-    }
+    _storage.save(session);
+    state = StopwatchState(session: session);
+    _startTicker();
+  }
 
-    state = state.copyWith(isRunning: false);
+  void pause() {
+    final current = state.session;
+    if (current == null || !current.isRunning) return;
+
+    _ticker?.cancel();
+
+    // Geçen süreyi birikime yaz, resumedAt'i düşür: duraklama süresi sayılmaz.
+    final paused = StudySession(
+      id: current.id,
+      startTime: current.startTime,
+      durationSeconds: current.elapsedSeconds,
+      resumedAt: null,
+    );
+
+    _storage.save(paused);
+    state = StopwatchState(session: paused);
   }
 
   Future<void> stop() async {
-    _timer?.cancel();
+    final current = state.session;
+    if (current == null) return;
 
-    final session = state.activeSession;
-    final seconds = state.seconds;
+    _ticker?.cancel();
+    final total = current.elapsedSeconds;
 
-    if (session != null) {
-      final completed = StudySession(
-        id: session.id,
-        startTime: session.startTime,
-        endTime: DateTime.now(),
-        durationSeconds: state.seconds,
-      );
-      await _storage.save(completed);
+    _storage.save(StudySession(
+      id: current.id,
+      startTime: current.startTime,
+      endTime: DateTime.now(),
+      durationSeconds: total,
+      resumedAt: null,
+    ));
 
-      // Günlük istatistiklere ekle
-      await _dailyStats.addSeconds(
-        date: DateTime.now(),
-        seconds: seconds,
-      );
-      
-      // Provider'ı yenile
-      ref.invalidate(todayStatsProvider);
-    }
+    await _dailyStats.addSeconds(date: DateTime.now(), seconds: total);
+    ref.invalidate(todayStatsProvider);
 
     state = const StopwatchState();
   }
 
+  /// Kaydetmeden at.
   void reset() {
-    _timer?.cancel();
-    state = state.copyWith(seconds: 0, isRunning: false);
+    _ticker?.cancel();
+    final current = state.session;
+    if (current != null) _storage.delete(current.id);
+    state = const StopwatchState();
   }
 }

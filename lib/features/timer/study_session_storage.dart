@@ -2,21 +2,21 @@ import 'package:hive/hive.dart';
 import 'study_session.dart';
 
 class StudySessionStorage {
-  static const _boxName = 'study_sessions_box';
+  static const boxName = 'study_sessions_box';
 
-  Future<Box> _open() async => Hive.openBox(_boxName);
+  /// Kutu main() içinde açılıyor; okumalar senkron olsun ki kronometre
+  /// ilk karede doğru değeri gösterebilsin (async yükleme = 00:00:00 flaşı).
+  Box get _box => Hive.box(boxName);
 
-  Future<void> save(StudySession session) async {
-    final box = await _open();
-    await box.put(session.id, session.toMap());
+  void save(StudySession session) {
+    _box.put(session.id, session.toMap());
   }
 
-  Future<List<StudySession>> getAll() async {
-    final box = await _open();
+  List<StudySession> getAll() {
     final items = <StudySession>[];
 
-    for (final k in box.keys) {
-      final raw = box.get(k);
+    for (final k in _box.keys) {
+      final raw = _box.get(k);
       if (raw == null) continue;
       try {
         items.add(StudySession.fromMap(Map<String, dynamic>.from(raw)));
@@ -29,17 +29,14 @@ class StudySessionStorage {
     return items;
   }
 
-  Future<StudySession?> getActive() async {
-    final all = await getAll();
-    try {
-      return all.firstWhere((s) => s.isActive);
-    } catch (_) {
-      return null;
+  StudySession? getActive() {
+    for (final s in getAll()) {
+      if (s.isActive) return s;
     }
+    return null;
   }
 
-  Future<void> delete(String id) async {
-    final box = await _open();
-    await box.delete(id);
+  void delete(String id) {
+    _box.delete(id);
   }
 }

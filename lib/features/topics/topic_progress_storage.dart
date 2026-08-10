@@ -2,9 +2,9 @@ import 'package:hive/hive.dart';
 import 'topic_progress.dart';
 
 class TopicProgressStorage {
-  static const _boxName = 'topic_progress_box';
+  static const boxName = 'topic_progress_box';
 
-  Future<Box> _open() async => Hive.openBox(_boxName);
+  Future<Box> _open() async => Hive.openBox(boxName);
 
   Future<TopicProgress?> get(String key) async {
     final box = await _open();
