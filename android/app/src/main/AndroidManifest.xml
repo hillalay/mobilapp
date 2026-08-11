@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Supabase (auth + senkron) için gerekli. Debug manifestindeki izin yalnızca
+         debug/profile derlemelerine uygulanır; release APK'da burada olmalı. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
