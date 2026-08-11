@@ -176,7 +176,7 @@ class _Greeting extends ConsumerWidget {
     final name = ref.watch(currentUserProvider)?.userMetadata?['username'] as String?;
     final suffix = (name == null || name.isEmpty) ? '' : ', $name';
 
-    final rows = topicsAsync.value?.take(_maxTopicRows).toList();
+    final rows = topicsAsync.value;
     final String title;
     if (rows == null || rows.isEmpty) {
       title = 'Bugüne konu\nseçmedin';
