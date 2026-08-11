@@ -13,6 +13,8 @@ class ProfileStorage {
     final box = await _open();
     await box.put(_key, {
       'track': profile.track.name, // mf/tm/sozel/dil
+      'dailyGoalHours': profile.dailyGoalHours,
+      'reminderHour': profile.reminderHour,
     });
   }
 
@@ -29,7 +31,12 @@ class ProfileStorage {
     // String -> enum
     final track = Track.values.byName(trackStr);
 
-    return UserProfile(track: track);
+    return UserProfile(
+      track: track,
+      // Alanlar eklenmeden önce yazılmış kayıtlarda yok; null kalır.
+      dailyGoalHours: map['dailyGoalHours'] as int?,
+      reminderHour: map['reminderHour'] as int?,
+    );
   }
 
   Future<void> clear() async {

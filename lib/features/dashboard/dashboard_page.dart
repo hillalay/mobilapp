@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:go_router/go_router.dart';
 
-import 'dashboard_providers.dart';
-import '../timer/daily_study_stats_providers.dart';
+import '../../app/theme.dart';
+import '../../app/ui.dart';
+import '../../core/auth_providers.dart';
 import '../timer/daily_study_stats.dart';
+import '../timer/daily_study_stats_providers.dart';
+import '../topics/topic_row.dart';
+import 'dashboard_providers.dart';
+import 'manual_entry_sheet.dart';
+import '../topics/add_topic_sheet.dart';
+
+const _maxTopicRows = 3;
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -13,608 +21,465 @@ class DashboardPage extends ConsumerStatefulWidget {
   ConsumerState<DashboardPage> createState() => _DashboardPageState();
 }
 
-enum Op { add, sub }
-
 class _DashboardPageState extends ConsumerState<DashboardPage> {
-  final _manualHoursController = TextEditingController();
-  final _manualMinutesController = TextEditingController();
-  final _manualQuestionsController = TextEditingController();
+  /// SnackBar yerine: kaydedilen sayaç kartı 400ms parlar.
+  bool _flashTime = false;
+  bool _flashQuestions = false;
 
-  Op _timeOp = Op.add;
-  Op _qOp = Op.add;
+  Future<void> _openManualSheet() async {
+    final result = await showManualEntrySheet(context);
+    if (result == null || !mounted) return;
 
-  @override
-  void dispose() {
-    _manualHoursController.dispose();
-    _manualMinutesController.dispose();
-    _manualQuestionsController.dispose();
-    super.dispose();
+    setState(() {
+      _flashTime = result.timeChanged;
+      _flashQuestions = result.questionsChanged;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (mounted) {
+      setState(() {
+        _flashTime = false;
+        _flashQuestions = false;
+      });
+    }
   }
 
-  InputDecoration _modernDeco(String label) => InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      );
-
-  Future<void> _addOrSubtractTime({required bool isAdd}) async {
-    final hours = int.tryParse(_manualHoursController.text) ?? 0;
-    final minutes = int.tryParse(_manualMinutesController.text) ?? 0;
-
-    if (hours == 0 && minutes == 0) {
+  Future<void> _toggleTopic(NextTopic t) async {
+    try {
+      await ref.read(topicCheckProvider.notifier).toggle(t);
+    } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen saat veya dakika girin'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    final totalMinutes = (hours * 60) + minutes;
-    final finalMinutes = isAdd ? totalMinutes : -totalMinutes;
-
-    await ref.read(dailyStatsStorageProvider).addManualMinutes(
-          date: DateTime.now(),
-          minutes: finalMinutes,
-        );
-
-    ref.invalidate(todayStatsProvider);
-
-    _manualHoursController.clear();
-    _manualMinutesController.clear();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isAdd
-                ? '✓ $hours saat $minutes dakika eklendi!'
-                : '✓ $hours saat $minutes dakika çıkarıldı!',
-          ),
-          backgroundColor: isAdd ? Colors.green : Colors.orange,
-        ),
+        const SnackBar(content: Text('Konu kaydedilemedi, tekrar dene.')),
       );
     }
-
-    setState(() {});
-  }
-
-  Future<void> _addOrSubtractQuestions({required bool isAdd}) async {
-    final q = int.tryParse(_manualQuestionsController.text) ?? 0;
-
-    if (q <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen soru sayısı girin'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    final finalQ = isAdd ? q : -q;
-
-    await ref.read(dailyStatsStorageProvider).addManualQuestions(
-          date: DateTime.now(),
-          questions: finalQ,
-        );
-
-    // ✅ toplam soru kartı anında güncellensin
-    ref.invalidate(dashboardTotalQuestionsProvider);
-
-    _manualQuestionsController.clear();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isAdd ? '✓ $q soru eklendi!' : '✓ $q soru çıkarıldı!'),
-          backgroundColor: isAdd ? Colors.blue : Colors.orange,
-        ),
-      );
-    }
-
-    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final summaryAsync = ref.watch(dashboardSummaryProvider);
-    final todayAsync = ref.watch(todayStatsProvider);
-    final totalQAsync = ref.watch(dashboardTotalQuestionsProvider);
+    final c = context.colors;
+    final topicsAsync = ref.watch(nextTopicsProvider);
+    final checks = ref.watch(topicCheckProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
-      body: summaryAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Hata: $e')),
-        data: (s) => SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                todayAsync.when(
-                  loading: () =>
-                      _topRowCards(todayText: '0sa 0dk', totalQAsync: totalQAsync),
-                  error: (e, _) =>
-                      _topRowCards(todayText: '0sa 0dk', totalQAsync: totalQAsync),
-                  data: (stats) {
-                    String fmt(int seconds) {
-                      final h = seconds ~/ 3600;
-                      final m = (seconds % 3600) ~/ 60;
-                      if (h == 0) return '${m}dk';
-                      return '${h}sa ${m}dk';
-                    }
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(22, 6, 22, 24),
+          children: [
+            _Greeting(topicsAsync: topicsAsync),
+            const SizedBox(height: 20),
+            _CounterRow(
+              flashTime: _flashTime,
+              flashQuestions: _flashQuestions,
+              onAdd: _openManualSheet,
+            ),
+            const SizedBox(height: 26),
 
-                    return _topRowCards(
-                      todayText: fmt(stats?.totalSeconds ?? 0),
-                      totalQAsync: totalQAsync,
-                    );
-                  },
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Sıradaki konular',
+                      style: AppTheme.display(16, c.ink, tracking: -0.01)),
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _StatCard(
-                        title: 'Bitti',
-                        value: '${s.doneCount} konu',
-                        icon: Icons.check_circle_outline,
-                        variant: _CardVariant.success,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _StatCard(
-                        title: 'Çalışıyorum',
-                        value: '${s.inProgressCount} konu',
-                        icon: Icons.play_circle_outline,
-                        variant: _CardVariant.warning,
-                      ),
-                    ),
-                  ],
+                GestureDetector(
+                  onTap: () => showAddTopicSheet(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(padding: const EdgeInsets.only(right: 14),
+                    child: Text('Ekle',
+                        style: AppTheme.ui(12, c.brandText, weight: FontWeight.w700)),
+                  ),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Son 7 Gün',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                GestureDetector(
+                  onTap: () => context.go('/topics'),
+                  behavior: HitTestBehavior.opaque,
+                  child: Text('Tümü',
+                      style: AppTheme.ui(12, c.brandText, weight: FontWeight.w700)),
                 ),
-                const SizedBox(height: 12),
-                _buildWeeklyCard(),
               ],
             ),
-          ),
+            const SizedBox(height: 12),
+
+            topicsAsync.when(
+              loading: () => Column(
+                children: [
+                  for (var i = 0; i < _maxTopicRows; i++) ...[
+                    if (i > 0) const SizedBox(height: 9),
+                    const Skeleton(height: 62, radius: AppRadius.row),
+                  ],
+                ],
+              ),
+              error: (e, _) => AppCard(
+                child: ErrorLine(
+                  message: 'Konular yüklenemedi.',
+                  onRetry: () => ref.invalidate(nextTopicsProvider),
+                ),
+              ),
+              data: (topics) {
+                if (topics.isEmpty) {
+                  return AppCard(
+                    child: EmptyState(
+                      compact: true,
+                      message: 'Henüz konu eklemedin.',
+                      actionLabel: 'Konu ekle ',
+                      onAction: () => showAddTopicSheet(context),
+                    ),
+                  );
+                }
+
+                final rows = topics; 
+                return Column(
+                  children: [
+                    for (var i = 0; i < rows.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 9),
+                      TopicRow(
+                        topic: rows[i],
+                        done: checks[rows[i].key] ?? rows[i].isDone,
+                        onTap: () => _toggleTopic(rows[i]),
+                      ),
+                    ],
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 22),
+
+            const _WeeklyCard(),
+          ],
         ),
       ),
     );
   }
+}
 
-  Widget _topRowCards({
-    required String todayText,
-    required AsyncValue<int> totalQAsync,
-  }) {
+// ---------------------------------------------------------------------------
+
+class _Greeting extends ConsumerWidget {
+  const _Greeting({required this.topicsAsync});
+
+  final AsyncValue<List<NextTopic>> topicsAsync;
+
+  static const _months = [
+    'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+  ];
+  static const _weekdays = [
+    'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
+    final now = DateTime.now();
+    final dateText =
+        '${_weekdays[now.weekday - 1]}, ${now.day} ${_months[now.month - 1]}';
+
+    final name = ref.watch(currentUserProvider)?.userMetadata?['username'] as String?;
+    final suffix = (name == null || name.isEmpty) ? '' : ', $name';
+
+    final rows = topicsAsync.value?.take(_maxTopicRows).toList();
+    final String title;
+    if (rows == null || rows.isEmpty) {
+      title = 'Bugüne konu\nseçmedin';
+    } else {
+      final checks = ref.watch(topicCheckProvider);
+      final remaining =
+          rows.where((t) => !(checks[t.key] ?? t.isDone)).length;
+      title = remaining > 0
+          ? 'Bugün $remaining konu\nkaldı$suffix'
+          : 'Bugün her şey\ntamam$suffix';
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(dateText, style: AppTheme.ui(14, c.inkMuted)),
+              const SizedBox(height: 4),
+              Text(title, style: AppTheme.display(30, c.ink).copyWith(
+                letterSpacing: -0.9,
+              )),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        const Mascot(size: 74, period: Duration(milliseconds: 4500)),
+      ],
+    );
+  }
+}
+
+class _CounterRow extends ConsumerWidget {
+  const _CounterRow({
+    required this.flashTime,
+    required this.flashQuestions,
+    required this.onAdd,
+  });
+
+  final bool flashTime;
+  final bool flashQuestions;
+  final VoidCallback onAdd;
+
+  static String fmt(int seconds) {
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    if (h == 0) return '${m}dk';
+    return '${h}sa ${m}dk';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
+    final todayAsync = ref.watch(todayStatsProvider);
+    final totalQAsync = ref.watch(dashboardTotalQuestionsProvider);
+
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
-            title: 'Bugün',
-            value: todayText,
-            icon: Icons.today_outlined,
-            variant: _CardVariant.primary,
+          child: _CounterCard(
+            label: 'Bugün',
+            value: todayAsync.maybeWhen(
+              data: (s) => fmt(s?.totalSeconds ?? 0),
+              orElse: () => '—',
+            ),
+            dark: true,
+            flash: flashTime,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
-          child: totalQAsync.when(
-            loading: () => const _StatCard(
-              title: 'Toplam Soru',
-              value: '…',
-              icon: Icons.edit_note_outlined,
-              variant: _CardVariant.neutral,
+          child: _CounterCard(
+            label: 'Soru',
+            value: totalQAsync.maybeWhen(
+              data: (q) => '$q',
+              orElse: () => '—',
             ),
-            error: (e, _) => const _StatCard(
-              title: 'Toplam Soru',
-              value: '0',
-              icon: Icons.edit_note_outlined,
-              variant: _CardVariant.neutral,
+            dark: false,
+            flash: flashQuestions,
+          ),
+        ),
+        const SizedBox(width: 10),
+        GestureDetector(
+          onTap: onAdd,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            width: 62,
+            height: 74,
+            decoration: BoxDecoration(
+              color: c.brand,
+              borderRadius: BorderRadius.circular(20),
             ),
-            data: (q) => _StatCard(
-              title: 'Toplam Soru',
-              value: '$q',
-              icon: Icons.edit_note_outlined,
-              variant: _CardVariant.neutral,
-            ),
+            child: Icon(Icons.add_rounded, size: 26, color: c.brandInk),
           ),
         ),
       ],
     );
   }
+}
 
-  Widget _buildWeeklyCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ✅ Süre Ekle/Çıkar
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Theme.of(context).dividerColor.withValues(alpha: 0.25),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.timer_outlined,
-                          size: 18, color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(width: 8),
-                      const Text('Çalışma Süresi',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
-                      const Spacer(),
-                      SegmentedButton<Op>(
-                        segments: const [
-                          ButtonSegment(value: Op.add, label: Text('Ekle')),
-                          ButtonSegment(value: Op.sub, label: Text('Çıkar')),
-                        ],
-                        selected: {_timeOp},
-                        onSelectionChanged: (s) => setState(() => _timeOp = s.first),
-                        showSelectedIcon: false,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _manualHoursController,
-                          keyboardType: TextInputType.number,
-                          decoration: _modernDeco('Saat'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: _manualMinutesController,
-                          keyboardType: TextInputType.number,
-                          decoration: _modernDeco('Dakika'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    onPressed: () => _addOrSubtractTime(isAdd: _timeOp == Op.add),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Uygula'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(44),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+class _CounterCard extends StatelessWidget {
+  const _CounterCard({
+    required this.label,
+    required this.value,
+    required this.dark,
+    required this.flash,
+  });
+
+  final String label;
+  final String value;
+  final bool dark;
+  final bool flash;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+
+    final bg = dark ? (isDarkTheme ? c.surface : c.ink) : c.surface;
+    // Koyu temada kart zemini de koyu; değeri `background` ile yazmak
+    // siyah üstüne siyah demek olurdu.
+    final valueColor = dark && !isDarkTheme ? c.background : c.ink;
+    final labelColor = dark ? const Color(0xFF9C948B) : c.inkMuted;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      height: 74,
+      // Dikey 15 padding'de etiket + 24px değer 74'e sığmıyor (2px taşma).
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: flash ? c.brandSoft : bg,
+        borderRadius: BorderRadius.circular(20),
+        border: dark ? null : Border.all(color: c.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label,
+              style: AppTheme.ui(11.5, flash ? c.brandText : labelColor)),
+          const SizedBox(height: 2),
+          // Değer asla iki satıra bölünmez.
+          Text(
+            value,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+            style: AppTheme.display(
+              24,
+              flash ? c.brandText : valueColor,
+              tracking: -0.02,
             ),
-
-            const SizedBox(height: 12),
-
-            // ✅ Soru Ekle/Çıkar
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Theme.of(context).dividerColor.withValues(alpha: 0.25),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.edit_note_outlined,
-                          size: 18, color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(width: 8),
-                      const Text('Soru Sayısı',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
-                      const Spacer(),
-                      SegmentedButton<Op>(
-                        segments: const [
-                          ButtonSegment(value: Op.add, label: Text('Ekle')),
-                          ButtonSegment(value: Op.sub, label: Text('Çıkar')),
-                        ],
-                        selected: {_qOp},
-                        onSelectionChanged: (s) => setState(() => _qOp = s.first),
-                        showSelectedIcon: false,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _manualQuestionsController,
-                    keyboardType: TextInputType.number,
-                    decoration: _modernDeco('Soru'),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    onPressed: () => _addOrSubtractQuestions(isAdd: _qOp == Op.add),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Uygula'),
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(44),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 10),
-            const Divider(),
-            const SizedBox(height: 14),
-
-            FutureBuilder<List<DailyStudyStats>>(
-              future: ref.read(dailyStatsStorageProvider).loadLastWeek(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Padding(
-                    padding: EdgeInsets.all(40),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                final weekData = snapshot.data!;
-                final totalWeekSeconds =
-                    weekData.fold<int>(0, (sum, d) => sum + d.totalSeconds);
-
-                if (totalWeekSeconds == 0) {
-                  return const Padding(
-                    padding: EdgeInsets.all(40),
-                    child: Center(
-                      child: Text('Henüz veri yok', style: TextStyle(color: Colors.grey)),
-                    ),
-                  );
-                }
-
-                final totalWeekQuestions =
-                    weekData.fold<int>(0, (sum, d) => sum + d.manualQuestions);
-
-                return Column(
-                  children: [
-                    SizedBox(
-                      height: 220,
-                      child: PieChart(
-                        PieChartData(
-                          sectionsSpace: 2,
-                          centerSpaceRadius: 60,
-                          sections: _buildPieChartSections(weekData),
-                        ),
-                      ),
-                    ),
-
-                    // ✅ Altta Pzt/Sal/Çar chipleri
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.center,
-                      children: List.generate(7, (i) {
-                        final day = weekData[i];
-                        final h = day.totalSeconds ~/ 3600;
-                        final m = (day.totalSeconds % 3600) ~/ 60;
-                        final dayName = _getDayName(i);
-                        final timeText = h == 0 ? '${m}dk' : '${h}sa ${m}dk';
-
-                        return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: _getColorForDay(i),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '$dayName • $timeText',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // ✅ Toplam soru
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(14),
-                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      ),
-                      child: Text(
-                        'Son 7 Gün Toplam Soru: $totalWeekQuestions',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
+}
 
-  // ✅ Dilimde saat/dk
-  List<PieChartSectionData> _buildPieChartSections(List<DailyStudyStats> weekData) {
-    return List.generate(7, (i) {
-      final seconds = weekData[i].totalSeconds;
-      if (seconds == 0) return null;
+class _WeeklyCard extends ConsumerStatefulWidget {
+  const _WeeklyCard();
 
-      final h = seconds ~/ 3600;
-      final m = (seconds % 3600) ~/ 60;
-      final title = h > 0 ? '${h}sa' : '${m}dk';
+  @override
+  ConsumerState<_WeeklyCard> createState() => _WeeklyCardState();
+}
 
-      return PieChartSectionData(
-        value: seconds.toDouble(),
-        title: title,
-        color: _getColorForDay(i),
-        radius: 50,
-        titleStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w800,
-          color: Colors.white,
-        ),
-      );
-    }).whereType<PieChartSectionData>().toList();
+class _WeeklyCardState extends ConsumerState<_WeeklyCard> {
+  late Future<List<DailyStudyStats>> _future =
+      ref.read(dailyStatsStorageProvider).loadLastWeek();
+
+  /// Açılış animasyonu: çubuklar alttan yukarı büyür.
+  bool _grown = false;
+
+  void _reload() {
+    setState(() {
+      _grown = false;
+      _future = ref.read(dailyStatsStorageProvider).loadLastWeek();
+    });
   }
 
-  Color _getColorForDay(int index) {
-    final colors = [
-      Colors.blueAccent,
-      Colors.green,
-      Colors.orange,
-      Colors.purple,
-      Colors.pink,
-      Colors.teal,
-      Colors.indigo,
-    ];
-    return colors[index % colors.length];
-  }
-
-  // ✅ Son 7 güne göre kayan gün adı (today bazlı)
-  String _getDayName(int index) {
-    final days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+  /// Bugün en sağda: eski `_getDayName` mantığıyla aynı.
+  String _dayName(int index) {
+    const days = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
     final today = DateTime.now().weekday - 1;
     final dayIndex = (today - 6 + index) % 7;
     return days[dayIndex < 0 ? dayIndex + 7 : dayIndex];
   }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-    this.variant = _CardVariant.neutral,
-  });
-
-  final String title;
-  final String value;
-  final IconData icon;
-  final _CardVariant variant;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final palette = _paletteFor(scheme, variant);
+    final c = context.colors;
 
-    return Card(
-      color: palette.bg,
-      surfaceTintColor: palette.bg,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            Icon(icon, color: palette.fg),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      child: FutureBuilder<List<DailyStudyStats>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return ErrorLine(
+              message: 'Haftalık veri yüklenemedi.',
+              onRetry: _reload,
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Skeleton(height: 16, width: 90),
+                SizedBox(height: 18),
+                Skeleton(height: 78, radius: 7),
+              ],
+            );
+          }
+
+          final week = snapshot.data!;
+          final total = week.fold<int>(0, (a, b) => a + b.totalSeconds);
+          if (total == 0) {
+            return EmptyState(
+              compact: true,
+              message: 'İlk çalışmanı kaydet, hafta burada dolmaya başlasın.',
+              actionLabel: 'Elle kayıt ekle',
+              onAction: () => showManualEntrySheet(context),
+            );
+          }
+
+          // Büyüme animasyonunu ilk kareden sonra tetikle.
+          if (!_grown) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _grown = true);
+            });
+          }
+
+          final maxSeconds =
+              week.map((d) => d.totalSeconds).reduce((a, b) => a > b ? a : b);
+          final totalH = total ~/ 3600;
+          final totalM = (total % 3600) ~/ 60;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Text(title, style: TextStyle(fontSize: 12, color: palette.subtle)),
-                  const SizedBox(height: 6),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: palette.fg,
-                    ),
+                  Expanded(
+                    child: Text('Son 7 gün',
+                        style: AppTheme.display(14, c.ink, tracking: -0.01)),
                   ),
+                  Text('${totalH}sa ${totalM}dk',
+                      style: AppTheme.ui(12, c.inkMuted)),
                 ],
               ),
-            ),
-          ],
-        ),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 78,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var i = 0; i < week.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 9),
+                      Expanded(
+                        child: AnimatedFractionallySizedBox(
+                          duration: Duration(milliseconds: 600 + i * 70),
+                          curve: const Cubic(.2, .8, .2, 1),
+                          alignment: Alignment.bottomCenter,
+                          heightFactor: _grown && maxSeconds > 0
+                              ? (week[i].totalSeconds / maxSeconds)
+                                  .clamp(0.03, 1.0)
+                              : 0.03,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: i == week.length - 1 ? c.brand : c.barTrack,
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  for (var i = 0; i < week.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        _dayName(i),
+                        textAlign: TextAlign.center,
+                        style: AppTheme.ui(
+                          10,
+                          i == week.length - 1 ? c.ink : c.inkFaint,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
-}
-
-_CardPalette _paletteFor(ColorScheme scheme, _CardVariant v) {
-  switch (v) {
-    case _CardVariant.neutral:
-      return _CardPalette(
-        bg: scheme.surfaceContainerHighest,
-        fg: scheme.onSurface,
-        subtle: scheme.onSurfaceVariant,
-      );
-    case _CardVariant.primary:
-      return _CardPalette(
-        bg: scheme.primaryContainer,
-        fg: scheme.onPrimaryContainer,
-        subtle: scheme.onPrimaryContainer.withValues(alpha: 0.8),
-      );
-    case _CardVariant.success:
-      return _CardPalette(
-        bg: Colors.green.shade100,
-        fg: Colors.green.shade900,
-        subtle: Colors.green.shade800,
-      );
-    case _CardVariant.warning:
-      return _CardPalette(
-        bg: Colors.blue.shade100,
-        fg: const Color.fromARGB(255, 94, 128, 179),
-        subtle: const Color.fromARGB(255, 88, 130, 177),
-      );
-  }
-}
-
-enum _CardVariant { neutral, primary, success, warning }
-
-class _CardPalette {
-  final Color bg;
-  final Color fg;
-  final Color subtle;
-
-  const _CardPalette({
-    required this.bg,
-    required this.fg,
-    required this.subtle,
-  });
 }

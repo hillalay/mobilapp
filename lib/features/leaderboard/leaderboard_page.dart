@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../app/ui.dart';
 import '../../core/auth_providers.dart';
 import '../../core/study_presence.dart';
-import '../profile/avatar_section.dart' show AvatarCircle;
 
 enum LeaderboardRange {
   today('v_leaderboard_today', 'Günlük'),
@@ -57,6 +57,17 @@ final leaderboardProvider = FutureProvider.autoDispose
             stopwatchSeconds: (r['stopwatch_seconds'] as num?)?.toInt() ?? 0,
           ))
       .toList();
+});
+
+/// Profil kimlik kartındaki "haftalık sıra". Liderlik tablosuyla aynı sorgu.
+final myWeeklyRankProvider = FutureProvider<int?>((ref) async {
+  final username =
+      ref.watch(currentUserProvider)?.userMetadata?['username'] as String?;
+  if (username == null || username.isEmpty) return null;
+
+  final rows = await ref.watch(leaderboardProvider(LeaderboardRange.week).future);
+  final index = rows.indexWhere((r) => r.username == username);
+  return index < 0 ? null : index + 1;
 });
 
 class LeaderboardPage extends ConsumerStatefulWidget {

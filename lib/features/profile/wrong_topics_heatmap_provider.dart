@@ -16,6 +16,43 @@ class TopicTrend {
 
 typedef TrendMap = Map<String /*lesson*/, Map<String /*topic*/, TopicTrend>>;
 
+/// Ders × hafta ızgarası: son 8 hafta, her hücre o hafta o dersten çıkan
+/// yanlış sayısı. Son eleman içinde bulunulan hafta.
+///
+/// `wrongTopicsTrendLast10Provider` konu bazlı ve hafta boyutu yok; profil
+/// ısı haritası zaman ekseni istediği için aynı kaynaktan (examsProvider)
+/// ayrıca türetiliyor.
+const heatmapWeeks = 8;
+
+final wrongLessonsByWeekProvider = Provider<Map<String, List<int>>>((ref) {
+  final async = ref.watch(examsProvider);
+
+  return async.maybeWhen(
+    data: (items) {
+      final now = DateTime.now();
+      final out = <String, List<int>>{};
+
+      for (final e in items) {
+        if (e.kind != ExamKind.general || e.general == null) continue;
+
+        final weeksAgo = now.difference(e.createdAt).inDays ~/ 7;
+        if (weeksAgo < 0 || weeksAgo >= heatmapWeeks) continue;
+        final slot = heatmapWeeks - 1 - weeksAgo; // en yeni sağda
+
+        for (final key in e.general!.wrongTopics) {
+          final lesson = key.split('•').first.trim();
+          if (lesson.isEmpty) continue;
+          final row = out.putIfAbsent(lesson, () => List.filled(heatmapWeeks, 0));
+          row[slot]++;
+        }
+      }
+
+      return out;
+    },
+    orElse: () => <String, List<int>>{},
+  );
+});
+
 /// SADECE GENERAL TYT/AYT üzerinden:
 /// Son 10 deneme vs önceki 10 deneme trend
 final wrongTopicsTrendLast10Provider = Provider<TrendMap>((ref) {

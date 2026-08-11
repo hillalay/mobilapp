@@ -107,6 +107,22 @@ class DailyStudyStatsStorage {
     return result;
   }
 
+  /// Tüm zamanların toplam çalışma süresi (profil kimlik kartı için).
+  Future<int> loadTotalSeconds() async {
+    final box = await _open();
+    int sum = 0;
+
+    for (final k in box.keys) {
+      final raw = box.get(k);
+      if (raw == null) continue;
+
+      final map = Map<String, dynamic>.from(raw);
+      sum += (map['totalSeconds'] as int?) ?? 0;
+    }
+
+    return sum;
+  }
+
   /// ✅ TOPLAM SORU: sadece manualQuestions birikimi
   Future<int> loadTotalManualQuestions() async {
     final box = await _open();

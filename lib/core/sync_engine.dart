@@ -9,6 +9,7 @@ import '../features/profile/profile_storage.dart';
 import '../features/timer/daily_study_stats_storage.dart';
 import '../features/timer/study_session_storage.dart';
 import '../features/topics/topic_progress_storage.dart';
+import '../features/topics/my_topics_storage.dart';
 
 /// Offline-first senkron: Hive ana kaynak, Supabase yedek/ortak kaynak.
 ///
@@ -33,6 +34,7 @@ class SyncEngine {
     'topic_progress': TopicProgressStorage.boxName,
     'exams': ExamStorage.boxName,
     'profile': ProfileStorage.boxName,
+    'my_topics': MyTopicsStorage.boxName,
   };
 
   static const _dirtyBoxName = 'sync_dirty_box';

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="180 120 580 730" width="580" height="730">
+<title>Denememetre maskot</title>
+  <g fill="none" stroke="#1B1B1B" stroke-width="15" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 300L214 274"></path><path d="M298 328L206 324"></path><path d="M300 356L212 378"></path>
+    <path d="M640 300L726 274"></path><path d="M642 328L734 324"></path><path d="M640 356L728 378"></path>
+  </g>
+  <g fill="#FFFFFF" stroke="#1B1B1B" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M356 258L332 146L438 214Z"></path>
+    <path d="M584 258L612 150L512 210Z"></path>
+    <ellipse cx="470" cy="336" rx="152" ry="138"></ellipse>
+    <path d="M356 448C318 548 322 652 344 726C352 752 334 776 348 786C364 796 390 790 398 774C406 756 402 740 406 730C442 736 518 738 558 728C564 742 564 762 574 776C586 792 614 792 624 780C634 766 618 748 614 726C636 652 624 548 586 448Z"></path>
+  </g>
+  <path d="M612 700C702 706 746 664 724 604C714 578 688 574 676 592" fill="none" stroke="#1B1B1B" stroke-width="16" stroke-linecap="round"></path>
+  <g transform="rotate(40 540 520)" stroke="#1B1B1B" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M472 300h88v420h-88z" fill="#FFD166"></path>
+    <path d="M472 348h88" fill="none"></path>
+    <path d="M472 720h88L516 818Z" fill="#FFFFFF"></path>
+    <path d="M498 766h36L516 818Z" fill="#1B1B1B"></path>
+  </g>
+  <ellipse cx="605" cy="405" rx="44" ry="36" fill="#FFFFFF" stroke="#1B1B1B" stroke-width="16"></ellipse>
+  <ellipse cx="406" cy="643" rx="46" ry="38" fill="#FFFFFF" stroke="#1B1B1B" stroke-width="16"></ellipse>
+  <g fill="none" stroke="#1B1B1B" stroke-width="14" stroke-linecap="round">
+    <path d="M420 308C432 292 450 292 460 308"></path>
+    <path d="M492 308C504 292 522 292 532 308"></path>
+    <path d="M414 258L442 274"></path>
+    <path d="M530 258L502 274"></path>
+  </g>
+  <ellipse cx="476" cy="374" rx="15" ry="21" fill="none" stroke="#1B1B1B" stroke-width="13"></ellipse>
+</svg>

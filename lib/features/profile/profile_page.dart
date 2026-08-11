@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/theme.dart';
+import '../../app/ui.dart';
 import '../../core/auth_providers.dart';
 import 'avatar_section.dart';
+import 'profile_settings_section.dart';
 import 'profile_todo_section.dart';
 import 'heatmap_section.dart';
 
@@ -43,40 +46,46 @@ class ProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final c = context.colors;
     final user = ref.watch(currentUserProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profil'),
-        actions: [
-          if (user != null)
-            IconButton(
-              icon: const Icon(Icons.logout),
-              tooltip: 'Çıkış yap',
-              onPressed: () => _signOut(context, ref),
-            ),
-        ],
-      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (user != null) ...[
-                const AvatarSection(),
-                const SizedBox(height: 24),
-              ],
-
-              // ✅ NOTES + TODO
-              const ProfileTodoSection(),
-
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(22, 4, 22, 28),
+          children: [
+            if (user != null) ...[
+              const IdentityCard(),
               const SizedBox(height: 24),
-
-              // ✅ ISI HARİTASI
-              const HeatmapSection(topTopicsPerLesson: 10),
             ],
-          ),
+
+            const ProfileTodoSection(),
+            const SizedBox(height: 24),
+
+            const ProfileSettingsSection(),
+            const SizedBox(height: 24),
+
+            const HeatmapSection(),
+
+            if (user != null) ...[
+              const SizedBox(height: 24),
+              AppCard(
+                onTap: () => _signOut(context, ref),
+                radius: 18,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.logout, size: 18, color: c.danger),
+                    const SizedBox(width: 8),
+                    Text('Çıkış yap',
+                        style: AppTheme.ui(14, c.danger, weight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

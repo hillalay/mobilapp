@@ -1,11 +1,11 @@
 import 'dart:math' as math;
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth_providers.dart';
+import '../../app/theme.dart';
 import 'stopwatch_controller.dart';
 
 class TimerPage extends ConsumerWidget {
@@ -17,7 +17,6 @@ class TimerPage extends ConsumerWidget {
     final notifier = ref.read(stopwatchProvider.notifier);
 
     return Scaffold(
-      backgroundColor: state.isRunning ? Colors.green.shade50 : Colors.grey.shade50,
       appBar: AppBar(
         title: const Text('Kronometre'),
         backgroundColor: Colors.transparent,
@@ -26,7 +25,7 @@ class TimerPage extends ConsumerWidget {
           // Supabase yapılandırılmamışsa liderlik tablosu da yok.
           if (ref.watch(supabaseClientProvider) != null)
             IconButton(
-              icon: const Icon(Icons.emoji_events_outlined),
+              icon: Icon(Icons.emoji_events_outlined, color: context.colors.brand),
               tooltip: 'Liderlik Tablosu',
               onPressed: () => context.push('/timer/leaderboard'),
             ),
@@ -66,7 +65,7 @@ class TimerPage extends ConsumerWidget {
           _CircularButton(
             onPressed: notifier.start,
             icon: Icons.play_arrow_rounded,
-            color: Colors.green,
+            color: context.colors.brand,
             size: 80,
             label: 'Başlat',
           ),
@@ -81,7 +80,7 @@ class TimerPage extends ConsumerWidget {
           _CircularButton(
             onPressed: notifier.pause,
             icon: Icons.pause_rounded,
-            color: Colors.orange,
+            color: context.colors.ink,
             size: 80,
             label: 'Duraklat',
           ),
@@ -93,7 +92,6 @@ class TimerPage extends ConsumerWidget {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: const Text('✓ Çalışma kaydedildi!'),
-                    backgroundColor: Colors.green.shade700,
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -103,7 +101,7 @@ class TimerPage extends ConsumerWidget {
               }
             },
             icon: Icons.save_rounded,
-            color: Colors.blue,
+            color: context.colors.brand,
             size: 64,
             label: 'Kaydet',
           ),
@@ -117,7 +115,7 @@ class TimerPage extends ConsumerWidget {
         _CircularButton(
           onPressed: notifier.start,
           icon: Icons.play_arrow_rounded,
-          color: Colors.green,
+          color: context.colors.brand,
           size: 80,
           label: 'Devam',
         ),
@@ -125,7 +123,7 @@ class TimerPage extends ConsumerWidget {
         _CircularButton(
           onPressed: notifier.reset,
           icon: Icons.refresh_rounded,
-          color: Colors.grey,
+          color: context.colors.inkMuted,
           size: 64,
           label: 'Sıfırla',
         ),
@@ -137,7 +135,6 @@ class TimerPage extends ConsumerWidget {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: const Text('✓ Çalışma kaydedildi!'),
-                  backgroundColor: Colors.green.shade700,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -147,7 +144,7 @@ class TimerPage extends ConsumerWidget {
             }
           },
           icon: Icons.save_rounded,
-          color: Colors.blue,
+          color: context.colors.ink,
           size: 64,
           label: 'Kaydet',
         ),
@@ -175,6 +172,8 @@ class CircularTimer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+
     return SizedBox(
       width: 280,
       height: 280,
@@ -186,6 +185,9 @@ class CircularTimer extends StatelessWidget {
             painter: _CircularTimerPainter(
               progress: (seconds % 60) / 60.0,
               isRunning: isRunning,
+              trackColor: c.barTrack,
+              runningColor: c.success,
+              pausedColor: c.brand,
             ),
           ),
           Column(
@@ -196,7 +198,7 @@ class CircularTimer extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.w900,
-                  color: isRunning ? Colors.green.shade700 : Colors.grey.shade700,
+                  color: isRunning ? c.success : c.ink,
                   letterSpacing: 2,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
@@ -209,7 +211,7 @@ class CircularTimer extends StatelessWidget {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: isRunning ? Colors.green : Colors.grey,
+                      color: isRunning ? c.success : c.inkFaint,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -217,7 +219,7 @@ class CircularTimer extends StatelessWidget {
                   Text(
                     isRunning ? 'Çalışıyor' : 'Duraklatıldı',
                     style: TextStyle(
-                      color: Colors.grey.shade600,
+                      color: c.inkMuted,
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
@@ -235,8 +237,17 @@ class CircularTimer extends StatelessWidget {
 class _CircularTimerPainter extends CustomPainter {
   final double progress;
   final bool isRunning;
+  final Color trackColor;
+  final Color runningColor;
+  final Color pausedColor;
 
-  _CircularTimerPainter({required this.progress, required this.isRunning});
+  _CircularTimerPainter({
+    required this.progress,
+    required this.isRunning,
+    required this.trackColor,
+    required this.runningColor,
+    required this.pausedColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -244,7 +255,7 @@ class _CircularTimerPainter extends CustomPainter {
     final radius = size.width / 2;
 
     final bgPaint = Paint()
-      ..color = Colors.grey.shade200
+      ..color = trackColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 12
       ..strokeCap = StrokeCap.round;
@@ -252,7 +263,7 @@ class _CircularTimerPainter extends CustomPainter {
     canvas.drawCircle(center, radius - 6, bgPaint);
 
     final progressPaint = Paint()
-      ..color = isRunning ? Colors.green : Colors.grey.shade400
+      ..color = isRunning ? runningColor : pausedColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 12
       ..strokeCap = StrokeCap.round;
@@ -268,7 +279,10 @@ class _CircularTimerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CircularTimerPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.isRunning != isRunning;
+    return oldDelegate.progress != progress ||
+        oldDelegate.isRunning != isRunning ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.pausedColor != pausedColor;
   }
 }
 
@@ -299,7 +313,7 @@ class _CircularButton extends StatelessWidget {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: color.withOpacity(0.3),
+                color: color.withValues(alpha: 0.3),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
               ),
@@ -324,7 +338,7 @@ class _CircularButton extends StatelessWidget {
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
+              color: context.colors.inkMuted,
             ),
           ),
         ],

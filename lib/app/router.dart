@@ -24,19 +24,27 @@ import '../features/profile/profile_controller.dart';
 import '../features/profile/profile_page.dart';
 
 import '../features/timer/timer_page.dart';
-import '../features/timer/stopwatch_page.dart';
 
 import '../features/topics/topics_page.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
-  // Profil state’ini dinle: değişince redirect tekrar çalışsın
-  final profileAsync = ref.watch(profileProvider);
-  // Supabase yapılandırılmamışsa false kalır; uygulama yerel çalışmaya devam eder.
-  final requiresLogin = ref.watch(requiresLoginProvider);
+  // Router yalnızca BİR kez kurulur. Eskiden profileProvider `watch` ediliyordu;
+  // profil her yenilendiğinde (açılışta senkron çekmesi de yeniliyor) yeni bir
+  // GoRouter üretiliyor, yeni router da initialLocation'a dönüyordu. Bu yüzden
+  // onboarding her açılışta karşımıza çıkıyordu. Artık `refreshListenable` ile
+  // sadece redirect tekrar çalışıyor; kullanıcı bulunduğu sekmede kalıyor.
+  final refresh = ValueNotifier<int>(0);
+  ref.listen(profileProvider, (_, _) => refresh.value++);
+  ref.listen(requiresLoginProvider, (_, _) => refresh.value++);
+  ref.onDispose(refresh.dispose);
 
   return GoRouter(
-    initialLocation: '/onboarding',
+    initialLocation: '/',
+    refreshListenable: refresh,
     redirect: (context, state) {
+      final profileAsync = ref.read(profileProvider);
+      final requiresLogin = ref.read(requiresLoginProvider);
+
       final location = state.matchedLocation;
       final goingToLogin = location == '/login';
       final goingToOnboarding = location == '/onboarding';
@@ -56,10 +64,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/',
+        // '/' ekranı yok, her zaman bir yere yönlenmeli. Profil hâlâ
+        // yükleniyorsa dashboard'a git; profil gelmezse üstteki redirect
+        // onboarding'e çevirir. Tersini yapmak (yüklenirken onboarding)
+        // mevcut kullanıcıya her açılışta onboarding göstermek olurdu.
         redirect: (context, state) {
-          if(profileAsync.isLoading) return null;
-          final hasProfile = profileAsync.value != null;
-          return hasProfile ? '/dashboard' : '/onboarding';
+          final profileAsync = ref.read(profileProvider);
+          if (profileAsync.isLoading) return '/dashboard';
+          return profileAsync.value != null ? '/dashboard' : '/onboarding';
         },
       ),
 
@@ -91,7 +103,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/stopwatch',
-            builder: (context, state) => const StopwatchPage(),
+            builder: (context, state) => const TimerPage(),
           ),
           // '/timer' altında: alt menüde Kronometre sekmesi seçili kalsın.
           GoRoute(
