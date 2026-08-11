@@ -2,12 +2,22 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/auth_providers.dart';
 
 const _avatarBucket = 'avatars';
+
+/// Yüklenen görselin sınırları. Liderlik tablosunda 36px gösteriliyor,
+/// ücretsiz planda depolama kotası da dar.
+const _maxAvatarPx = 512;
+const _avatarQuality = 80;
+
+/// image_cropper'ın yerel kırpma ekranı yalnızca mobilde var; masaüstünde
+/// çağrılırsa MissingPluginException atar.
+bool get _cropSupported => Platform.isAndroid || Platform.isIOS;
 
 /// Kendi profil fotoğrafının adresi. Yükleme sonrası invalidate ediliyor.
 final myAvatarUrlProvider = FutureProvider<String?>((ref) async {
@@ -34,6 +44,42 @@ class AvatarSection extends ConsumerStatefulWidget {
 class _AvatarSectionState extends ConsumerState<AvatarSection> {
   bool _busy = false;
 
+  /// Kare kırpma ekranı. Kullanıcı yakınlaştırıp kaydırarak hangi bölgenin
+  /// görüneceğini seçiyor. İptal ederse null döner.
+  Future<CroppedFile?> _crop(String sourcePath) {
+    return ImageCropper().cropImage(
+      sourcePath: sourcePath,
+      // Profil fotoğrafı dairesel gösterildiği için oran 1:1'e kilitli.
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      maxWidth: _maxAvatarPx,
+      maxHeight: _maxAvatarPx,
+      compressFormat: ImageCompressFormat.jpg,
+      compressQuality: _avatarQuality,
+      uiSettings: [
+        AndroidUiSettings(
+          toolbarTitle: 'Fotoğrafı kırp',
+          lockAspectRatio: true,
+          // Alt kontroller açık: yakınlaştırma/döndürme sekmeleri görünsün.
+          // Oran yine kilitli, tek preset kare.
+          hideBottomControls: false,
+          initAspectRatio: CropAspectRatioPreset.square,
+          aspectRatioPresets: const [CropAspectRatioPreset.square],
+          cropStyle: CropStyle.circle,
+        ),
+        IOSUiSettings(
+          title: 'Fotoğrafı kırp',
+          doneButtonTitle: 'Tamam',
+          cancelButtonTitle: 'Vazgeç',
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: false,
+          aspectRatioPickerButtonHidden: true,
+          aspectRatioPresets: const [CropAspectRatioPreset.square],
+          cropStyle: CropStyle.circle,
+        ),
+      ],
+    );
+  }
+
   Future<void> _pickAndUpload() async {
     final client = ref.read(supabaseClientProvider);
     final user = ref.read(currentUserProvider);
@@ -41,13 +87,23 @@ class _AvatarSectionState extends ConsumerState<AvatarSection> {
 
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      // Yükleme boyutunu sınırla: liderlik tablosunda 36px gösteriliyor,
-      // depolama kotası da ücretsiz planda dar.
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 80,
+      // Kırpma yapılacaksa tam çözünürlükte al: önce küçültmek, sonra küçük bir
+      // bölgeyi kırpmak bulanık sonuç verirdi. Küçültme kırpma çıktısına
+      // uygulanıyor. Masaüstünde kırpma olmadığı için burada uygulanıyor.
+      maxWidth: _cropSupported ? null : _maxAvatarPx.toDouble(),
+      maxHeight: _cropSupported ? null : _maxAvatarPx.toDouble(),
+      imageQuality: _cropSupported ? null : _avatarQuality,
     );
     if (picked == null) return;
+
+    var sourcePath = picked.path;
+
+    if (_cropSupported) {
+      final cropped = await _crop(picked.path);
+      // İptal/geri: hiçbir yükleme yapılmıyor, eski fotoğraf duruyor.
+      if (cropped == null) return;
+      sourcePath = cropped.path;
+    }
 
     setState(() => _busy = true);
     try {
@@ -55,7 +111,7 @@ class _AvatarSectionState extends ConsumerState<AvatarSection> {
 
       await client.storage.from(_avatarBucket).upload(
             path,
-            File(picked.path),
+            File(sourcePath),
             fileOptions: const FileOptions(
               upsert: true,
               contentType: 'image/jpeg',

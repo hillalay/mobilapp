@@ -67,17 +67,12 @@ class SyncEngine {
   Timer? _debounceTimer;
   Timer? _retryTimer;
   Future<void>? _startFuture;
-  bool _running = false;
-
-  bool get isRunning => _running;
 
   /// Giriş yapıldığında çağrılır. İlk çekmeyi bekler ki uygulama doğru veriyle
   /// açılsın. Aynı anda birden çok çağrı gelirse hepsi aynı ilk çekmeyi bekler.
   Future<void> start() => _startFuture ??= _start();
 
   Future<void> _start() async {
-    _running = true;
-
     for (final entry in collections.entries) {
       final collection = entry.key;
       final box = Hive.box(entry.value);
@@ -96,7 +91,6 @@ class SyncEngine {
   }
 
   Future<void> stop() async {
-    _running = false;
     _startFuture = null;
     _debounceTimer?.cancel();
     _retryTimer?.cancel();
@@ -119,11 +113,6 @@ class SyncEngine {
     }
     await _dirty.clear();
     await _meta.clear();
-  }
-
-  Future<void> flush() async {
-    await pull();
-    await push();
   }
 
   int _ticks = 0;
