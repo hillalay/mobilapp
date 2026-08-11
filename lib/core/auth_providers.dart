@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -45,13 +46,21 @@ final syncEngineProvider = Provider<SyncEngine?>((ref) {
 /// [MobilApp] tarafından izleniyor.
 final syncBootstrapProvider = Provider<void>((ref) {
   final engine = ref.watch(syncEngineProvider);
-  if (engine == null) return;
+  if (engine == null) {
+    // En sık karşılaşılan durum: --dart-define verilmeden çalıştırmak.
+    debugPrint('[sync] devre dışı: Supabase yapılandırılmamış '
+        '(--dart-define-from-file=env.json verildi mi?)');
+    return;
+  }
 
   final user = ref.watch(currentUserProvider);
   if (user == null) {
+    debugPrint('[sync] başlatılmadı: oturum açık değil, giriş bekleniyor');
     engine.stop();
     return;
   }
+
+  debugPrint('[sync] başlatılıyor: kullanıcı ${user.id}');
 
   // İlk çekme bitince Hive'dan okuyan her şey tazelenir.
   engine.start().then((_) {

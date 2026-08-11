@@ -137,9 +137,23 @@ class SyncEngine {
 
   // ---------------------------------------------------------------------------
 
+  /// Konsolda izlenebilsin diye tek noktadan log. `flutter run` çıktısında
+  /// `[sync]` ile aratabilirsin.
+  static void _log(String message) => debugPrint('[sync] $message');
+
   Future<void> push() async {
     final userId = _client.auth.currentUser?.id;
-    if (userId == null || _dirty.isEmpty) return;
+
+    // Sessiz çıkışları görünür yap: "hiç denemedi" ile "denedi ve başardı"
+    // konsolda ayırt edilebilsin.
+    if (userId == null) {
+      _log('push atlandı: oturum yok (${_dirty.length} kirli kayıt bekliyor)');
+      return;
+    }
+    if (_dirty.isEmpty) {
+      _log('push atlandı: kirli kayıt yok');
+      return;
+    }
 
     // Anahtarları önce sabitle: push sürerken gelen yeni yazmalar kirli kalsın.
     final ids = _dirty.keys.map((k) => k.toString()).toList();
@@ -164,19 +178,34 @@ class SyncEngine {
       });
     }
 
-    if (rows.isEmpty) return;
+    if (rows.isEmpty) {
+      _log('push atlandı: gönderilecek satır çıkmadı');
+      return;
+    }
+
+    _log('push deneniyor: ${rows.length} satır '
+        '(${rows.map((r) => '${r['collection']}/${r['key']}').join(', ')})');
 
     try {
       await _client.from('records').upsert(rows, onConflict: 'user_id,collection,key');
       await _dirty.deleteAll(ids);
+      _log('push başarılı: ${rows.length} satır yazıldı');
+    } on PostgrestException catch (e) {
+      // Sunucu cevap verdi ama reddetti — RLS, şema uyuşmazlığı, kısıt ihlali.
+      _log('push REDDEDİLDİ: code=${e.code} message=${e.message} '
+          'details=${e.details} hint=${e.hint}');
     } catch (e) {
+      // Ağ/DNS/TLS gibi sunucuya ulaşamama durumları.
       // Kirli işaretler duruyor; bağlantı gelince tekrar denenir.
-      debugPrint('sync push başarısız: $e');
+      _log('push BAŞARISIZ (${e.runtimeType}): $e');
     }
   }
 
   Future<void> pull() async {
-    if (_client.auth.currentUser == null) return;
+    if (_client.auth.currentUser == null) {
+      _log('pull atlandı: oturum yok');
+      return;
+    }
 
     final since = _meta.get(_cursorKey) as String? ?? '1970-01-01T00:00:00Z';
 
@@ -206,8 +235,12 @@ class SyncEngine {
       if (rows.isNotEmpty) {
         await _meta.put(_cursorKey, rows.last['updated_at'] as String);
       }
+      _log('pull tamam: ${rows.length} satır (since=$since)');
+    } on PostgrestException catch (e) {
+      _log('pull REDDEDİLDİ: code=${e.code} message=${e.message} '
+          'details=${e.details} hint=${e.hint}');
     } catch (e) {
-      debugPrint('sync pull başarısız: $e');
+      _log('pull BAŞARISIZ (${e.runtimeType}): $e');
     }
   }
 

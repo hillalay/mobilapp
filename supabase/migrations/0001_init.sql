@@ -40,6 +40,11 @@ create trigger records_touch
 -- ---------------------------------------------------------------------------
 -- Row Level Security: her kullanıcı yalnızca kendi satırlarını görür/yazar.
 -- ---------------------------------------------------------------------------
+-- RLS tek başına yetmez: PostgreSQL önce tablo yetkisine bakar, satır süzmesi
+-- ondan sonra gelir. GRANT verilmezse istemci 42501 permission denied alır.
+grant select, insert, update on public.records to authenticated;
+revoke all on public.records from anon;
+
 alter table public.records enable row level security;
 
 drop policy if exists "records_own_rows" on public.records;
