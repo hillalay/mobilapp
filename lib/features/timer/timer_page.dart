@@ -80,7 +80,8 @@ class TimerPage extends ConsumerWidget {
           _CircularButton(
             onPressed: notifier.pause,
             icon: Icons.pause_rounded,
-            color: context.colors.ink,
+            color: context.colors.inkFaint,
+            iconColor: context.colors.brand,
             size: 80,
             label: 'Duraklat',
           ),
@@ -291,6 +292,7 @@ class _CircularButton extends StatelessWidget {
     required this.onPressed,
     required this.icon,
     required this.color,
+    this.iconColor,
     this.size = 72,
     this.label,
   });
@@ -298,6 +300,7 @@ class _CircularButton extends StatelessWidget {
   final VoidCallback onPressed;
   final IconData icon;
   final Color color;
+  final Color? iconColor;
   final double size;
   final String? label;
 
@@ -323,7 +326,7 @@ class _CircularButton extends StatelessWidget {
             onPressed: onPressed,
             style: ElevatedButton.styleFrom(
               backgroundColor: color,
-              foregroundColor: Colors.white,
+              foregroundColor: iconColor ?? Colors.white,
               shape: const CircleBorder(),
               padding: EdgeInsets.zero,
               elevation: 0,
