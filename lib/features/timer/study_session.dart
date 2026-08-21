@@ -30,13 +30,14 @@ class StudySession {
 
   /// Tek doğruluk kaynağı: birikmiş süre + (çalışıyorsa) devam ettirmeden bu yana geçen süre.
   /// Duvar saatinden hesaplandığı için uygulama kapansa da doğru kalır.
-int get elapsedSeconds {
-  if (!isRunning) return durationSeconds;
-  final ms = DateTime.now().difference(resumedAt!).inMilliseconds;
-  // inSeconds her zaman aşağı yuvarlıyordu (her pause'da sistematik kayıp).
-  // round() ile ortalama kayıp sıfıra yaklaşır.
-  return durationSeconds + (ms / 1000).round();
-}
+  int get elapsedSeconds {
+    if (!isRunning) return durationSeconds;
+    // inSeconds her zaman aşağı yuvarlıyordu: her duraklat/devam turunda
+    // 1 saniyeye kadar sistematik kayıp birikiyordu. round() ile ortalama
+    // kayıp sıfıra yaklaşır.
+    final ms = DateTime.now().difference(resumedAt!).inMilliseconds;
+    return durationSeconds + (ms / 1000).round();
+  }
 
   String get formattedDuration {
     final hours = durationSeconds ~/ 3600;
