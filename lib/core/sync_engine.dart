@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
@@ -15,7 +16,9 @@ import '../features/topics/my_topics_storage.dart';
 ///
 /// Yerel yazmalar `box.watch()` ile yakalanıp "kirli" işaretlenir, tek bir
 /// `records` tablosuna push edilir. Çekmede sunucunun `updated_at` imleci
-/// kullanılır. Çakışmada son yazan kazanır (last-write-wins).
+/// kullanılır. Çakışmada son yazan kazanır (last-write-wins) — tek istisna:
+/// yerelde henüz push edilememiş bir değişiklik varsa o anahtar için çekme
+/// atlanır, yerel kazanır (bkz. [pull]).
 ///
 /// ponytail: LWW yeterli çünkü satırlar tek kullanıcıya ait, çakışma ancak
 /// aynı kaydı iki cihazda aynı anda düzenleyince olur. Alan bazlı birleştirme
@@ -65,14 +68,31 @@ class SyncEngine {
   Box get _meta => Hive.box(_metaBoxName);
 
   final _subs = <StreamSubscription<BoxEvent>>[];
-  final _suppressed = <String>{};
+
+  /// Sunucudan gelen yazmalar için beklenen `box.watch()` olayları. Sayaç,
+  /// çünkü aynı anahtar tek pull partisinde birden çok kez gelebiliyor;
+  /// `Set` olduğunda ikinci olay bastırılmayıp sunucu verisi geri push
+  /// ediliyordu.
+  final _suppressed = <String, int>{};
   Timer? _debounceTimer;
   Timer? _retryTimer;
   Future<void>? _startFuture;
+  String? _startedForUserId;
 
   /// Giriş yapıldığında çağrılır. İlk çekmeyi bekler ki uygulama doğru veriyle
   /// açılsın. Aynı anda birden çok çağrı gelirse hepsi aynı ilk çekmeyi bekler.
-  Future<void> start() => _startFuture ??= _start();
+  Future<void> start() {
+    if (_startFuture != null) return _startFuture!;
+    _startedForUserId = _client.auth.currentUser?.id;
+    return _startFuture = _start();
+  }
+
+  /// [start] bu kullanıcı için daha önce çağrıldı mı. `onAuthStateChange`
+  /// token yenilemede de akıyor ve `syncBootstrapProvider`'ı yeniden kuruyor;
+  /// açılıştaki invalidate zinciri buna bakıp yalnızca ilk kurulumda çalışıyor.
+  /// Kullanıcı değişirse (arada çıkış olayı düşmese bile) yine false döner.
+  bool hasStartedFor(String? userId) =>
+      _startFuture != null && _startedForUserId == userId;
 
   Future<void> _start() async {
     for (final entry in collections.entries) {
@@ -80,7 +100,7 @@ class SyncEngine {
       final box = Hive.box(entry.value);
       _subs.add(box.watch().listen((event) {
         final id = '$collection|${event.key}';
-        if (_suppressed.remove(id)) return; // sunucudan gelen değişiklik
+        if (_consumeSuppression(id)) return; // sunucudan gelen değişiklik
         _dirty.put(id, true);
         _scheduleFlush();
       }));
@@ -94,6 +114,7 @@ class SyncEngine {
 
   Future<void> stop() async {
     _startFuture = null;
+    _startedForUserId = null;
     _debounceTimer?.cancel();
     _retryTimer?.cancel();
     for (final s in _subs) {
@@ -101,6 +122,19 @@ class SyncEngine {
     }
     _subs.clear();
     _suppressed.clear();
+  }
+
+  /// Bir bastırma kredisi harcar. true dönerse olay sunucudan gelen yazmaya
+  /// ait, kirli işaretlenmemeli.
+  bool _consumeSuppression(String id) {
+    final left = _suppressed[id];
+    if (left == null) return false;
+    if (left <= 1) {
+      _suppressed.remove(id);
+    } else {
+      _suppressed[id] = left - 1;
+    }
+    return true;
   }
 
   void _scheduleFlush() {
@@ -150,6 +184,10 @@ class SyncEngine {
     final ids = _dirty.keys.map((k) => k.toString()).toList();
     final rows = <Map<String, dynamic>>[];
 
+    // Gönderilen değerin parmak izi. Upsert bittiğinde kutudaki değer hâlâ
+    // aynıysa kirli işaret silinir; push sürerken üzerine yazılmışsa korunur.
+    final sent = <String, String>{};
+
     for (final id in ids) {
       final sep = id.indexOf('|');
       if (sep < 0) continue;
@@ -160,6 +198,7 @@ class SyncEngine {
       if (boxName == null) continue;
 
       final raw = Hive.box(boxName).get(key);
+      sent[id] = fingerprint(raw);
       rows.add({
         'user_id': userId,
         'collection': collection,
@@ -179,8 +218,23 @@ class SyncEngine {
 
     try {
       await _client.from('records').upsert(rows, onConflict: 'user_id,collection,key');
-      await _dirty.deleteAll(ids);
-      _log('push başarılı: ${rows.length} satır yazıldı');
+
+      // `deleteAll(ids)`, upsert sürerken aynı anahtara gelen yeni yerel
+      // yazmanın kirli işaretini de siliyordu: o veri bir daha hiç
+      // gönderilmiyordu. Artık yalnızca gönderdiğimiz değer hâlâ kutudaysa
+      // işaret siliniyor, değiştiyse korunuyor ve sonraki push'a kalıyor.
+      final kept = <String>[];
+      for (final entry in sent.entries) {
+        if (fingerprint(_valueOf(entry.key)) == entry.value) {
+          await _dirty.delete(entry.key);
+        } else {
+          kept.add(entry.key);
+        }
+      }
+
+      _log('push başarılı: ${rows.length} satır yazıldı'
+          '${kept.isEmpty ? '' : ', ${kept.length} kayıt push sürerken '
+              'değişti, kirli bırakıldı: ${kept.join(', ')}'}');
     } on PostgrestException catch (e) {
       // Sunucu cevap verdi ama reddetti — RLS, şema uyuşmazlığı, kısıt ihlali.
       _log('push REDDEDİLDİ: code=${e.code} message=${e.message} '
@@ -207,15 +261,37 @@ class SyncEngine {
           .gt('updated_at', since)
           .order('updated_at');
 
+      var skipped = 0;
+
       for (final row in rows) {
         final collection = row['collection'] as String;
         final boxName = collections[collection];
         if (boxName == null) continue;
 
         final key = row['key'] as String;
+        final id = '$collection|$key';
+
+        // Yerelde henüz gönderilememiş bir değişiklik varsa yerel kazanır:
+        // sunucudaki sürüm, push edemediğimiz veriden eski. Push reddedilip
+        // ("REDDEDİLDİ"/"BAŞARISIZ") kirli işaret beklemede kalırken gelen
+        // çekme, güncel yereli eziyordu — kaydedilmiş bir kronometre oturumu
+        // tekrar "çalışıyor" hâline dönüyor, günlük toplam geriye sarıyordu.
+        //
+        // ponytail: kirli işaret, "yerel daha yeni"nin saat gerektirmeyen
+        // kanıtı. Cihaz saatiyle sunucu saatini karşılaştırmak, saati kaymış
+        // bir cihazda kalıcı yanlış kazanan üretirdi. Bedeli: iki cihaz aynı
+        // kaydı ayrı ayrı düzenlerse yerel düzenleme kazanır. Alan bazlı
+        // birleştirme gerekirse records'a sürüm kolonu eklenip burada çözülür.
+        if (_dirty.containsKey(id)) {
+          skipped++;
+          continue;
+        }
+
         final box = Hive.box(boxName);
 
-        _suppressed.add('$collection|$key');
+        // Kredi yazmaya mümkün olduğunca yakın veriliyor: arada await olursa
+        // o aralıkta düşen yerel yazmanın olayı yutulabilirdi.
+        _suppressed.update(id, (n) => n + 1, ifAbsent: () => 1);
         if (row['deleted'] == true || row['data'] == null) {
           await box.delete(key);
         } else {
@@ -223,10 +299,14 @@ class SyncEngine {
         }
       }
 
+      // İmleç atlanan satırlar için de ilerliyor: o sürümü bilinçli reddettik,
+      // bir sonraki push sunucudaki kaydı zaten üzerine yazacak.
       if (rows.isNotEmpty) {
         await _meta.put(_cursorKey, rows.last['updated_at'] as String);
       }
-      _log('pull tamam: ${rows.length} satır (since=$since)');
+      _log('pull tamam: ${rows.length} satır (since=$since)'
+          '${skipped == 0 ? '' : ', $skipped satır atlandı: '
+              'yerelde bekleyen değişiklik var'}');
     } on PostgrestException catch (e) {
       _log('pull REDDEDİLDİ: code=${e.code} message=${e.message} '
           'details=${e.details} hint=${e.hint}');
@@ -234,6 +314,26 @@ class SyncEngine {
       _log('pull BAŞARISIZ (${e.runtimeType}): $e');
     }
   }
+
+  /// `'collection|key'` -> kutudaki güncel değer. Kayıt silinmişse ya da kutu
+  /// tanınmıyorsa null; parmak izi karşılaştırması için ikisini ayırmak gerekmez.
+  dynamic _valueOf(String id) {
+    final sep = id.indexOf('|');
+    if (sep < 0) return null;
+    final boxName = collections[id.substring(0, sep)];
+    if (boxName == null) return null;
+    return Hive.box(boxName).get(id.substring(sep + 1));
+  }
+
+  /// Bir değerin "aynı mı" karşılaştırması için düz metin özeti.
+  ///
+  /// Dart'ta `Map == Map` referans karşılaştırmasıdır ve `box.get()` her
+  /// çağrıda ayrı bir `Map` döndürebilir; düz `==` ile karşılaştırmak "hep
+  /// farklı" sonucu verir, kirli işaretler hiç temizlenmez. Bu yüzden
+  /// karşılaştırma iki `String` üzerinde yapılıyor. Değerler zaten jsonb'ye
+  /// gönderildiği için kodlanabilir olmaları garanti.
+  @visibleForTesting
+  static String fingerprint(dynamic value) => jsonEncode(_jsonSafe(value));
 
   /// Hive `Map<dynamic, dynamic>` döndürür; jsonb'ye gitmeden önce tiplendirilir.
   static dynamic _jsonSafe(dynamic value) {
