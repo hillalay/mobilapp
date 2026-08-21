@@ -16,7 +16,9 @@ import '../features/topics/my_topics_storage.dart';
 ///
 /// Yerel yazmalar `box.watch()` ile yakalanıp "kirli" işaretlenir, tek bir
 /// `records` tablosuna push edilir. Çekmede sunucunun `updated_at` imleci
-/// kullanılır. Çakışmada son yazan kazanır (last-write-wins).
+/// kullanılır. Çakışmada son yazan kazanır (last-write-wins) — tek istisna:
+/// yerelde henüz push edilememiş bir değişiklik varsa o anahtar için çekme
+/// atlanır, yerel kazanır (bkz. [pull]).
 ///
 /// ponytail: LWW yeterli çünkü satırlar tek kullanıcıya ait, çakışma ancak
 /// aynı kaydı iki cihazda aynı anda düzenleyince olur. Alan bazlı birleştirme
@@ -66,7 +68,12 @@ class SyncEngine {
   Box get _meta => Hive.box(_metaBoxName);
 
   final _subs = <StreamSubscription<BoxEvent>>[];
-  final _suppressed = <String>{};
+
+  /// Sunucudan gelen yazmalar için beklenen `box.watch()` olayları. Sayaç,
+  /// çünkü aynı anahtar tek pull partisinde birden çok kez gelebiliyor;
+  /// `Set` olduğunda ikinci olay bastırılmayıp sunucu verisi geri push
+  /// ediliyordu.
+  final _suppressed = <String, int>{};
   Timer? _debounceTimer;
   Timer? _retryTimer;
   Future<void>? _startFuture;
@@ -81,7 +88,7 @@ class SyncEngine {
       final box = Hive.box(entry.value);
       _subs.add(box.watch().listen((event) {
         final id = '$collection|${event.key}';
-        if (_suppressed.remove(id)) return; // sunucudan gelen değişiklik
+        if (_consumeSuppression(id)) return; // sunucudan gelen değişiklik
         _dirty.put(id, true);
         _scheduleFlush();
       }));
@@ -102,6 +109,19 @@ class SyncEngine {
     }
     _subs.clear();
     _suppressed.clear();
+  }
+
+  /// Bir bastırma kredisi harcar. true dönerse olay sunucudan gelen yazmaya
+  /// ait, kirli işaretlenmemeli.
+  bool _consumeSuppression(String id) {
+    final left = _suppressed[id];
+    if (left == null) return false;
+    if (left <= 1) {
+      _suppressed.remove(id);
+    } else {
+      _suppressed[id] = left - 1;
+    }
+    return true;
   }
 
   void _scheduleFlush() {
@@ -228,15 +248,37 @@ class SyncEngine {
           .gt('updated_at', since)
           .order('updated_at');
 
+      var skipped = 0;
+
       for (final row in rows) {
         final collection = row['collection'] as String;
         final boxName = collections[collection];
         if (boxName == null) continue;
 
         final key = row['key'] as String;
+        final id = '$collection|$key';
+
+        // Yerelde henüz gönderilememiş bir değişiklik varsa yerel kazanır:
+        // sunucudaki sürüm, push edemediğimiz veriden eski. Push reddedilip
+        // ("REDDEDİLDİ"/"BAŞARISIZ") kirli işaret beklemede kalırken gelen
+        // çekme, güncel yereli eziyordu — kaydedilmiş bir kronometre oturumu
+        // tekrar "çalışıyor" hâline dönüyor, günlük toplam geriye sarıyordu.
+        //
+        // ponytail: kirli işaret, "yerel daha yeni"nin saat gerektirmeyen
+        // kanıtı. Cihaz saatiyle sunucu saatini karşılaştırmak, saati kaymış
+        // bir cihazda kalıcı yanlış kazanan üretirdi. Bedeli: iki cihaz aynı
+        // kaydı ayrı ayrı düzenlerse yerel düzenleme kazanır. Alan bazlı
+        // birleştirme gerekirse records'a sürüm kolonu eklenip burada çözülür.
+        if (_dirty.containsKey(id)) {
+          skipped++;
+          continue;
+        }
+
         final box = Hive.box(boxName);
 
-        _suppressed.add('$collection|$key');
+        // Kredi yazmaya mümkün olduğunca yakın veriliyor: arada await olursa
+        // o aralıkta düşen yerel yazmanın olayı yutulabilirdi.
+        _suppressed.update(id, (n) => n + 1, ifAbsent: () => 1);
         if (row['deleted'] == true || row['data'] == null) {
           await box.delete(key);
         } else {
@@ -244,10 +286,14 @@ class SyncEngine {
         }
       }
 
+      // İmleç atlanan satırlar için de ilerliyor: o sürümü bilinçli reddettik,
+      // bir sonraki push sunucudaki kaydı zaten üzerine yazacak.
       if (rows.isNotEmpty) {
         await _meta.put(_cursorKey, rows.last['updated_at'] as String);
       }
-      _log('pull tamam: ${rows.length} satır (since=$since)');
+      _log('pull tamam: ${rows.length} satır (since=$since)'
+          '${skipped == 0 ? '' : ', $skipped satır atlandı: '
+              'yerelde bekleyen değişiklik var'}');
     } on PostgrestException catch (e) {
       _log('pull REDDEDİLDİ: code=${e.code} message=${e.message} '
           'details=${e.details} hint=${e.hint}');
