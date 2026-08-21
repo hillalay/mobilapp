@@ -198,7 +198,7 @@ class SyncEngine {
       if (boxName == null) continue;
 
       final raw = Hive.box(boxName).get(key);
-      sent[id] = _fingerprint(raw);
+      sent[id] = fingerprint(raw);
       rows.add({
         'user_id': userId,
         'collection': collection,
@@ -225,7 +225,7 @@ class SyncEngine {
       // işaret siliniyor, değiştiyse korunuyor ve sonraki push'a kalıyor.
       final kept = <String>[];
       for (final entry in sent.entries) {
-        if (_fingerprint(_valueOf(entry.key)) == entry.value) {
+        if (fingerprint(_valueOf(entry.key)) == entry.value) {
           await _dirty.delete(entry.key);
         } else {
           kept.add(entry.key);
@@ -325,10 +325,15 @@ class SyncEngine {
     return Hive.box(boxName).get(id.substring(sep + 1));
   }
 
-  /// Bir değerin "aynı mı" karşılaştırması için düz metin özeti. Hive iç içe
-  /// `Map`/`List` döndürdüğü için `==` çalışmaz. Değerler zaten jsonb'ye
+  /// Bir değerin "aynı mı" karşılaştırması için düz metin özeti.
+  ///
+  /// Dart'ta `Map == Map` referans karşılaştırmasıdır ve `box.get()` her
+  /// çağrıda ayrı bir `Map` döndürebilir; düz `==` ile karşılaştırmak "hep
+  /// farklı" sonucu verir, kirli işaretler hiç temizlenmez. Bu yüzden
+  /// karşılaştırma iki `String` üzerinde yapılıyor. Değerler zaten jsonb'ye
   /// gönderildiği için kodlanabilir olmaları garanti.
-  static String _fingerprint(dynamic value) => jsonEncode(_jsonSafe(value));
+  @visibleForTesting
+  static String fingerprint(dynamic value) => jsonEncode(_jsonSafe(value));
 
   /// Hive `Map<dynamic, dynamic>` döndürür; jsonb'ye gitmeden önce tiplendirilir.
   static dynamic _jsonSafe(dynamic value) {
