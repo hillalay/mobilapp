@@ -62,32 +62,56 @@ class ProfileSettingsSection extends ConsumerWidget {
                   ),
                 ),
                 _Divider(color: c.hairline),
+                _SwitchRow(
+                  label: 'Çalışma saati hatırlatıcısı',
+                  value: profile.reminderEnabled,
+                  onChanged: (v) =>
+                      _save(ref, profile.copyWith(reminderEnabled: v)),
+                ),
+                _Divider(color: c.hairline),
                 _SettingRow(
-                  label: 'Hatırlatma',
-                  value: reminderChoices[profile.reminderHour]!.$2,
-                  onTap: () => _pick<int?>(
-                    context,
-                    title: 'Seni ne zaman dürtelim?',
-                    options: reminderChoices.entries
-                        .map((e) => (e.key, e.value.$2))
-                        .toList(),
-                    selected: profile.reminderHour,
-                    // Hatırlatma "kapalı" seçilebilsin diye copyWith değil,
-                    // doğrudan yeni profil kuruluyor (copyWith null'ı yok sayar).
-                    onSelected: (v) => _save(
-                      ref,
-                      UserProfile(
-                        track: profile.track,
-                        dailyGoalHours: profile.dailyGoalHours,
-                        reminderHour: v,
-                      ),
-                    ),
-                  ),
+                  label: 'Hatırlatma saati',
+                  value: _formatTime(profile),
+                  onTap: () => _pickTime(context, ref, profile),
                 ),
               ],
             ),
           ),
       ],
+    );
+  }
+
+  /// Saat seçilmediyse (onboarding'de "istemiyorum" denmişse) 'Seçilmedi'.
+  /// Anahtar kapalıyken saat korunuyor, sadece bildirim kurulmuyor.
+  static String _formatTime(UserProfile profile) {
+    final hour = profile.reminderHour;
+    if (hour == null) return 'Seçilmedi';
+    final h = hour.toString().padLeft(2, '0');
+    final m = profile.reminderMinute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  Future<void> _pickTime(
+    BuildContext context,
+    WidgetRef ref,
+    UserProfile profile,
+  ) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: profile.reminderTime ??
+          TimeOfDay(hour: profile.reminderHour ?? 8, minute: profile.reminderMinute),
+      // Uygulama 24 saatlik biçim kullanıyor; l10n kurulu olmadığı için
+      // seçici varsayılanda AM/PM kadranı açıyordu.
+      builder: (ctx, child) => MediaQuery(
+        data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+
+    await _save(
+      ref,
+      profile.copyWith(reminderHour: picked.hour, reminderMinute: picked.minute),
     );
   }
 
@@ -131,6 +155,33 @@ class ProfileSettingsSection extends ConsumerWidget {
     );
 
     if (chosen != null && chosen.value != selected) onSelected(chosen.value);
+  }
+}
+
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: AppTheme.ui(14, c.ink))),
+          Switch(value: value, onChanged: onChanged, activeThumbColor: c.brand),
+        ],
+      ),
+    );
   }
 }
 

@@ -46,3 +46,4 @@ app.*.map.json
 
 # Supabase anahtarlari (env.example.json kopyalanip doldurulur)
 env.json
+android/build/

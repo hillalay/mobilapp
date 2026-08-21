@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'profile_storage.dart';
 
@@ -36,21 +37,47 @@ class UserProfile {
   /// Onboarding 3. adım: hatırlatma saati (0-23). null = hatırlatma istemiyor.
   final int? reminderHour;
 
+  /// Hatırlatma saatinin dakikası (0-59). Onboarding sabit saatler sunduğu
+  /// için oradan hep 0 gelir; profil ayarlarındaki saat seçici dakika da
+  /// veriyor. Alan eklenmeden önce yazılmış kayıtlarda yok, 0 varsayılır.
+  final int reminderMinute;
+
+  /// Profil ayarlarındaki hatırlatıcı anahtarı. Varsayılan açık.
+  ///
+  /// [reminderHour] "saat seçilmedi / istemiyorum", bu alan ise "anahtarla
+  /// kapattım" demek. İkisi [reminderTime] içinde VE'lendiği için çelişebilen
+  /// iki ayrı "kapalı" durumu yok. Anahtar kapatılıp açıldığında saat
+  /// korunduğundan hatırlatma kaldığı saatten devam eder.
+  final bool reminderEnabled;
+
   const UserProfile({
     required this.track,
     this.dailyGoalHours,
     this.reminderHour,
+    this.reminderMinute = 0,
+    this.reminderEnabled = true,
   });
+
+  /// Zamanlanacak saat; anahtar kapalıysa ya da saat seçilmemişse null.
+  TimeOfDay? get reminderTime {
+    final hour = reminderHour;
+    if (!reminderEnabled || hour == null) return null;
+    return TimeOfDay(hour: hour, minute: reminderMinute);
+  }
 
   UserProfile copyWith({
     Track? track,
     int? dailyGoalHours,
     int? reminderHour,
+    int? reminderMinute,
+    bool? reminderEnabled,
   }) {
     return UserProfile(
       track: track ?? this.track,
       dailyGoalHours: dailyGoalHours ?? this.dailyGoalHours,
       reminderHour: reminderHour ?? this.reminderHour,
+      reminderMinute: reminderMinute ?? this.reminderMinute,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
     );
   }
 }
