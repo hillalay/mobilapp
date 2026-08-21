@@ -15,6 +15,8 @@ class ProfileStorage {
       'track': profile.track.name, // mf/tm/sozel/dil
       'dailyGoalHours': profile.dailyGoalHours,
       'reminderHour': profile.reminderHour,
+      'reminderMinute': profile.reminderMinute,
+      'reminderEnabled': profile.reminderEnabled,
     });
   }
 
@@ -36,6 +38,9 @@ class ProfileStorage {
       // Alanlar eklenmeden önce yazılmış kayıtlarda yok; null kalır.
       dailyGoalHours: map['dailyGoalHours'] as int?,
       reminderHour: map['reminderHour'] as int?,
+      reminderMinute: (map['reminderMinute'] as int?) ?? 0,
+      // Anahtar eklenmeden önceki kayıtlarda yok: varsayılan açık.
+      reminderEnabled: (map['reminderEnabled'] as bool?) ?? true,
     );
   }
 
