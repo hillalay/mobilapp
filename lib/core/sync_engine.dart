@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
@@ -150,6 +151,10 @@ class SyncEngine {
     final ids = _dirty.keys.map((k) => k.toString()).toList();
     final rows = <Map<String, dynamic>>[];
 
+    // Gönderilen değerin parmak izi. Upsert bittiğinde kutudaki değer hâlâ
+    // aynıysa kirli işaret silinir; push sürerken üzerine yazılmışsa korunur.
+    final sent = <String, String>{};
+
     for (final id in ids) {
       final sep = id.indexOf('|');
       if (sep < 0) continue;
@@ -160,6 +165,7 @@ class SyncEngine {
       if (boxName == null) continue;
 
       final raw = Hive.box(boxName).get(key);
+      sent[id] = _fingerprint(raw);
       rows.add({
         'user_id': userId,
         'collection': collection,
@@ -179,8 +185,23 @@ class SyncEngine {
 
     try {
       await _client.from('records').upsert(rows, onConflict: 'user_id,collection,key');
-      await _dirty.deleteAll(ids);
-      _log('push başarılı: ${rows.length} satır yazıldı');
+
+      // `deleteAll(ids)`, upsert sürerken aynı anahtara gelen yeni yerel
+      // yazmanın kirli işaretini de siliyordu: o veri bir daha hiç
+      // gönderilmiyordu. Artık yalnızca gönderdiğimiz değer hâlâ kutudaysa
+      // işaret siliniyor, değiştiyse korunuyor ve sonraki push'a kalıyor.
+      final kept = <String>[];
+      for (final entry in sent.entries) {
+        if (_fingerprint(_valueOf(entry.key)) == entry.value) {
+          await _dirty.delete(entry.key);
+        } else {
+          kept.add(entry.key);
+        }
+      }
+
+      _log('push başarılı: ${rows.length} satır yazıldı'
+          '${kept.isEmpty ? '' : ', ${kept.length} kayıt push sürerken '
+              'değişti, kirli bırakıldı: ${kept.join(', ')}'}');
     } on PostgrestException catch (e) {
       // Sunucu cevap verdi ama reddetti — RLS, şema uyuşmazlığı, kısıt ihlali.
       _log('push REDDEDİLDİ: code=${e.code} message=${e.message} '
@@ -234,6 +255,21 @@ class SyncEngine {
       _log('pull BAŞARISIZ (${e.runtimeType}): $e');
     }
   }
+
+  /// `'collection|key'` -> kutudaki güncel değer. Kayıt silinmişse ya da kutu
+  /// tanınmıyorsa null; parmak izi karşılaştırması için ikisini ayırmak gerekmez.
+  dynamic _valueOf(String id) {
+    final sep = id.indexOf('|');
+    if (sep < 0) return null;
+    final boxName = collections[id.substring(0, sep)];
+    if (boxName == null) return null;
+    return Hive.box(boxName).get(id.substring(sep + 1));
+  }
+
+  /// Bir değerin "aynı mı" karşılaştırması için düz metin özeti. Hive iç içe
+  /// `Map`/`List` döndürdüğü için `==` çalışmaz. Değerler zaten jsonb'ye
+  /// gönderildiği için kodlanabilir olmaları garanti.
+  static String _fingerprint(dynamic value) => jsonEncode(_jsonSafe(value));
 
   /// Hive `Map<dynamic, dynamic>` döndürür; jsonb'ye gitmeden önce tiplendirilir.
   static dynamic _jsonSafe(dynamic value) {
