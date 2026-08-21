@@ -77,10 +77,22 @@ class SyncEngine {
   Timer? _debounceTimer;
   Timer? _retryTimer;
   Future<void>? _startFuture;
+  String? _startedForUserId;
 
   /// Giriş yapıldığında çağrılır. İlk çekmeyi bekler ki uygulama doğru veriyle
   /// açılsın. Aynı anda birden çok çağrı gelirse hepsi aynı ilk çekmeyi bekler.
-  Future<void> start() => _startFuture ??= _start();
+  Future<void> start() {
+    if (_startFuture != null) return _startFuture!;
+    _startedForUserId = _client.auth.currentUser?.id;
+    return _startFuture = _start();
+  }
+
+  /// [start] bu kullanıcı için daha önce çağrıldı mı. `onAuthStateChange`
+  /// token yenilemede de akıyor ve `syncBootstrapProvider`'ı yeniden kuruyor;
+  /// açılıştaki invalidate zinciri buna bakıp yalnızca ilk kurulumda çalışıyor.
+  /// Kullanıcı değişirse (arada çıkış olayı düşmese bile) yine false döner.
+  bool hasStartedFor(String? userId) =>
+      _startFuture != null && _startedForUserId == userId;
 
   Future<void> _start() async {
     for (final entry in collections.entries) {
@@ -102,6 +114,7 @@ class SyncEngine {
 
   Future<void> stop() async {
     _startFuture = null;
+    _startedForUserId = null;
     _debounceTimer?.cancel();
     _retryTimer?.cancel();
     for (final s in _subs) {

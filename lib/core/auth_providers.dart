@@ -60,10 +60,22 @@ final syncBootstrapProvider = Provider<void>((ref) {
     return;
   }
 
+  // `onAuthStateChange` yalnızca giriş/çıkışta değil token yenilemede de
+  // akıyor; bu provider her olayda yeniden kuruluyordu. Motor zaten
+  // çalışıyorsa aşağıdaki invalidate zincirini tekrar çalıştırmıyoruz:
+  // stopwatchProvider dahil bütün provider'lar saatte bir boşuna sıfırlanıyor,
+  // kronometre Hive'dan yeniden kuruluyordu.
+  if (engine.hasStartedFor(user.id)) {
+    debugPrint('[sync] zaten çalışıyor: yeniden kurulum atlandı');
+    return;
+  }
+
   debugPrint('[sync] başlatılıyor: kullanıcı ${user.id}');
 
   // İlk çekme bitince Hive'dan okuyan her şey tazelenir.
   engine.start().then((_) {
+    // Çıkış yapılıp provider dispose edildiyse invalidate hata fırlatır.
+    if (!ref.mounted) return;
     ref.invalidate(profileProvider);
     ref.invalidate(stopwatchProvider);
     ref.invalidate(studySessionsProvider);

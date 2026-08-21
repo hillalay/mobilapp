@@ -49,6 +49,16 @@ void main() {
     expect(dirty().get('study_sessions|abc'), isTrue);
   });
 
+  test('hasStartedFor: aynı oturumda true, stop sonrası ve başka kullanıcıda false',
+      () async {
+    // setUp() içinde start() çağrıldı; oturum yok, yani userId null.
+    expect(engine.hasStartedFor(null), isTrue);
+    expect(engine.hasStartedFor('baska-kullanici'), isFalse);
+
+    await engine.stop();
+    expect(engine.hasStartedFor(null), isFalse);
+  });
+
   test('clearLocal tüm kutuları ve senkron durumunu temizler', () async {
     await Hive.box(StudySessionStorage.boxName).put('abc', {'id': 'abc'});
     await Future<void>.delayed(Duration.zero);
