@@ -29,21 +29,16 @@ final stopwatchProvider = NotifierProvider<StopwatchNotifier, StopwatchState>(
 );
 
 class StopwatchNotifier extends Notifier<StopwatchState> {
-  /// Ekranı tazeleyen sayaç.
   Timer? _ticker;
-
-  /// Günlük istatistiklere kısmi yazma yapan sayaç. Kronometre saatlerce
-  /// çalışıp uygulama öldürülse bile liderlik tablosu güncel kalsın diye.
   Timer? _flusher;
+  Future<void>? _inFlightFlush;
+  bool _stopping = false;
 
   static const _flushEvery = Duration(seconds: 60);
 
   @override
   StopwatchState build() {
     ref.onDispose(_stopTimers);
-
-    // Kaydedilmiş oturumu senkron geri yükle: uygulama kapanıp açılsa da
-    // kronometre kaldığı yerden devam eder, sıfırlanmaz.
     final active = _storage.getActive();
     if (active != null && active.isRunning) _startTimers();
     return StopwatchState(session: active);
@@ -53,8 +48,6 @@ class StopwatchNotifier extends Notifier<StopwatchState> {
   DailyStudyStatsStorage get _dailyStats => ref.read(dailyStatsStorageProvider);
   StudyPresence? get _presence => ref.read(studyPresenceProvider);
 
-  /// Sayaç sadece ekranı tazeler; süre her zaman [StudySession.elapsedSeconds]
-  /// üzerinden duvar saatinden hesaplanır. Tick kaçırmak süreyi bozmaz.
   void _startTimers() {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -70,29 +63,40 @@ class StopwatchNotifier extends Notifier<StopwatchState> {
     _flusher?.cancel();
   }
 
-  /// Son yazmadan bu yana geçen süreyi günlük istatistiklere ekler.
-  ///
-  /// Yalnızca **fark** yazılıyor ve yazılan miktar oturumun `flushedSeconds`
-  /// alanına işleniyor. `stop()` de aynı alana bakıp yalnızca kalanı ekliyor —
-  /// yoksa dakikada bir yazılan süre kapanışta ikinci kez sayılırdı.
-  Future<void> _flush() async {
+  /// Aynı anda yalnızca bir flush çalışsın diye (pause/stop/periyodik timer
+  /// çakışabiliyordu — B1). `stop()` ve `pause()` bu future'ı awaitleyerek
+  /// bekleyen bir yazmanın bitmesini garantiler.
+  Future<void> _flush() {
+    if (_inFlightFlush != null) return _inFlightFlush!;
+    final future = _doFlush();
+    _inFlightFlush = future;
+    future.whenComplete(() => _inFlightFlush = null);
+    return future;
+  }
+
+  Future<void> _doFlush() async {
     final current = state.session;
     if (current == null || !current.isRunning) return;
 
     final delta = current.elapsedSeconds - current.flushedSeconds;
     if (delta <= 0) return;
 
-    final marked = _copy(current, flushedSeconds: current.flushedSeconds + delta);
-    _storage.save(marked); // Hive yazması senkron motorunda kirli işaretlenir
-    state = StopwatchState(session: marked);
+    final now = DateTime.now();
 
-    await _dailyStats.addSeconds(
-      date: DateTime.now(),
-      seconds: delta,
+    // ÖNCE günlük istatistiklere yaz (B2). Bu await sırasında hata olursa
+    // ya da uygulama ölürse, flushedSeconds hiç artmamış olur — bir
+    // sonraki flush/stop aynı deltayı tekrar dener, veri kaybolmaz.
+    await _dailyStats.addSecondsSpan(
+      start: now.subtract(Duration(seconds: delta)),
+      end: now,
       fromStopwatch: true,
     );
-    // Yazma sırasında oturum kapanmış olabilir (çıkış yapmak provider'ı
-    // dispose ediyor); dispose edilmiş ref'te invalidate hata fırlatır.
+
+    // Yazma başarıyla bittikten SONRA flushedSeconds'ı işaretle.
+    final marked = _copy(current, flushedSeconds: current.flushedSeconds + delta);
+    _storage.save(marked);
+    state = StopwatchState(session: marked);
+
     if (ref.mounted) ref.invalidate(todayStatsProvider);
   }
 
@@ -139,11 +143,9 @@ class StopwatchNotifier extends Notifier<StopwatchState> {
     if (current == null || !current.isRunning) return;
 
     _stopTimers();
-    await _flush(); // duraklamadan önce biriken farkı yaz
+    await _flush();
 
     final latest = state.session ?? current;
-
-    // Geçen süreyi birikime yaz, resumedAt'i düşür: duraklama süresi sayılmaz.
     final paused = _copy(
       latest,
       durationSeconds: latest.elapsedSeconds,
@@ -156,41 +158,54 @@ class StopwatchNotifier extends Notifier<StopwatchState> {
   }
 
   Future<void> stop() async {
-    final current = state.session;
-    if (current == null) return;
+    // B8: çift tıklama koruması — stop() zaten çalışırken ikinci çağrı no-op.
+    if (_stopping) return;
+    _stopping = true;
+    try {
+      final current = state.session;
+      if (current == null) return;
 
-    _stopTimers();
-    final total = current.elapsedSeconds;
+      _stopTimers();
 
-    _storage.save(_copy(
-      current,
-      endTime: DateTime.now(),
-      durationSeconds: total,
-      clearResumedAt: true,
-      flushedSeconds: total,
-    ));
+      // Bekleyen bir flush varsa bitmesini bekle, flushedSeconds güncel olsun.
+      await _flush();
 
-    // Kısmi yazmalarla zaten eklenen kısmı düş; kalanı ekle.
-    final remaining = total - current.flushedSeconds;
-    if (remaining > 0) {
-      await _dailyStats.addSeconds(
-        date: DateTime.now(),
-        seconds: remaining,
-        fromStopwatch: true,
-      );
+      final latest = state.session ?? current;
+      final total = latest.elapsedSeconds;
+      final remaining = total - latest.flushedSeconds;
+
+      if (remaining > 0) {
+        final now = DateTime.now();
+        await _dailyStats.addSecondsSpan(
+          start: now.subtract(Duration(seconds: remaining)),
+          end: now,
+          fromStopwatch: true,
+        );
+      }
+
+      _storage.save(_copy(
+        latest,
+        endTime: DateTime.now(),
+        durationSeconds: total,
+        clearResumedAt: true,
+        flushedSeconds: total,
+      ));
+
+      if (ref.mounted) ref.invalidate(todayStatsProvider);
+
+      state = const StopwatchState();
+      await _presence?.setStudying(false);
+    } finally {
+      _stopping = false;
     }
-    if (!ref.mounted) return;
-    ref.invalidate(todayStatsProvider);
-
-    state = const StopwatchState();
-    await _presence?.setStudying(false);
   }
 
-  /// Kaydetmeden at.
   void reset() {
     _ticker?.cancel();
+    _flusher?.cancel(); // A4: önceden unutulmuştu, yetim timer sızıntısı
     final current = state.session;
     if (current != null) _storage.delete(current.id);
     state = const StopwatchState();
+    _presence?.setStudying(false); // A4: önceden hiç çağrılmıyordu
   }
 }
